@@ -14,7 +14,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/skratchdot/open-golang/open"
 
-	"github.com/rszyma/kanata-tray/icon"
+	"github.com/rszyma/kanata-tray/icons"
 )
 
 func main() {
@@ -296,7 +296,7 @@ const selectedItemPrefix = "> "
 func NewSystrayApp(menuTemplate *MenuTemplate) *SysTrayApp {
 	t := &SysTrayApp{menuTemplate: menuTemplate, selectedConfig: -1, selectedExec: -1}
 
-	systray.SetTemplateIcon(icon.Data, icon.Data)
+	systray.SetIcon(icons.Default)
 	systray.SetTitle("kanata-tray")
 	systray.SetTooltip("kanata-tray")
 
@@ -380,6 +380,8 @@ func (t *SysTrayApp) switchExeAndRun(index int, runner *KanataRunner) {
 
 func (t *SysTrayApp) runWithSelectedOptions(runner *KanataRunner) {
 	t.mOpenCrashLog.Hide()
+	systray.SetIcon(icons.Default)
+
 	execPath := t.menuTemplate.Executables[t.selectedExec].Value
 	configPath := t.menuTemplate.Configurations[t.selectedConfig].Value
 	err := runner.Run(execPath, configPath)
@@ -396,6 +398,8 @@ func (t *SysTrayApp) runWithSelectedOptions(runner *KanataRunner) {
 func (t *SysTrayApp) StartProcessingLoop(runner *KanataRunner, runRightAway bool, configFolder string) {
 	if runRightAway {
 		t.runWithSelectedOptions(runner)
+	} else {
+		systray.SetIcon(icons.Pause)
 	}
 
 	for {
@@ -406,7 +410,7 @@ func (t *SysTrayApp) StartProcessingLoop(runner *KanataRunner, runRightAway bool
 				t.runnerStatus = statusCrashed
 				t.mStatus.SetTitle(statusCrashed)
 				t.mOpenCrashLog.Show()
-				// todo: change tray icon to a one with warning sign or something.
+				systray.SetIcon(icons.Crash)
 			} else {
 				fmt.Println("Kanata process terminated successfully")
 			}
@@ -424,6 +428,7 @@ func (t *SysTrayApp) StartProcessingLoop(runner *KanataRunner, runRightAway bool
 				} else {
 					t.runnerStatus = statusIdle
 					t.mStatus.SetTitle(statusIdle)
+					systray.SetIcon(icons.Pause)
 				}
 			case statusCrashed:
 				// restart kanata
