@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -179,7 +178,7 @@ func menuTemplateFromConfig(cfg Config) MenuTemplate {
 	var result MenuTemplate
 
 	if cfg.General.IncludeExecutablesFromSystemPath {
-		defaultKanataConfig := path.Join(configdir.LocalConfig("kanata"), "kanata.kbd")
+		defaultKanataConfig := filepath.Join(configdir.LocalConfig("kanata"), "kanata.kbd")
 		cfg.Configurations = append(cfg.Configurations, defaultKanataConfig)
 	}
 	for i := range cfg.Configurations {
