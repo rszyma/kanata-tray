@@ -93,7 +93,6 @@ func NewSystrayApp(menuTemplate *MenuTemplate) *SysTrayApp {
 	return t
 }
 
-// Switches config, but it doesn't run it.
 func (t *SysTrayApp) switchConfigAndRun(index int, runner *runner.KanataRunner) {
 	oldIndex := t.selectedConfig
 	t.selectedConfig = index
@@ -223,6 +222,7 @@ func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, runRightAw
 }
 
 // Returns a channel that sends an index of item that was clicked.
+// TODO: pass ctx and cleanup on ctx cancel.
 func multipleMenuItemsClickListener(menuItems []*systray.MenuItem) chan int {
 	ch := make(chan int)
 	for i := range menuItems {
