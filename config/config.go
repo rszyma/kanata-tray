@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Configurations []string             `toml:"configurations"`
 	Executables    []string             `toml:"executables"`
+	LayerIcons     map[string]string    `toml:"layer_icons"`
 	General        GeneralConfigOptions `toml:"general"`
 }
 

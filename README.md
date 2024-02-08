@@ -34,6 +34,7 @@ executables = [
 [layer_icons]
 base = "hello.ico" 
 qwerty = "qwerty.ico"
+"*" = "other_layers.ico"
 
 [general]
 include_executables_from_system_path = false # default: true
@@ -43,7 +44,7 @@ launch_on_start = true # default: true
 
 Notes:
 - You can use `~` in paths to substitute to your "home" directory.
-- `layer_icons` maps kanata layer names to custom icons (which should be placed in config directory, next to `config.toml`)
+- `layer_icons` maps kanata layer names to custom icons. Custom icons should be placed in `icons` folder in config directory, next to `config.toml`. Accepted icon types on Linux are `.ico`, `.png`, `.jpg`; on Windows only `.ico` is supported. You can assign an icon to special identifier `"*"` to change icon for other layers not specified in `[layer_icons]`.
 - On Windows, when providing paths, you need to replace every `\` character with `\\`. Example: `C:\\Users\\<User1\\Desktop\\kanata.kbd`.
 
 Notes about autorun:
