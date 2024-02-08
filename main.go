@@ -116,10 +116,12 @@ func (r *KanataRunner) Run(kanataExecutablePath string, kanataConfigPath string)
 		return fmt.Errorf("failed to create temp file: %v", err)
 	}
 	r.cmd = exec.Command(kanataExecutablePath, "-c", kanataConfigPath)
+	r.cmd.Stdout = r.logFile
+	r.cmd.Stderr = r.logFile
 
 	go func() {
 		// We're waiting for previous process to be marked as finished in processing loop.
-		// We will know that happens when the process slot is writable.
+		// We will know that happens when the process slot becomes writable.
 		r.ProcessSlotCh <- struct{}{}
 
 		fmt.Printf("Running command: %s\n", r.cmd.String())
