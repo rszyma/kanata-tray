@@ -14,7 +14,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 
 	"github.com/rszyma/kanata-tray/icons"
-	"github.com/rszyma/kanata-tray/os_specific"
+	"github.com/rszyma/kanata-tray/runner"
 )
 
 func main() {
@@ -48,106 +48,6 @@ type MenuEntry struct {
 	Value        string
 }
 
-type KanataRunner struct {
-	RetCh             chan error    // Returns the error returned by `cmd.Wait()`
-	ProcessSlotCh     chan struct{} // prevent race condition when restarting kanata
-	cmd               *exec.Cmd
-	logFile           *os.File
-	manualTermination bool
-}
-
-func NewKanataRunner() KanataRunner {
-	return KanataRunner{
-		RetCh: make(chan error),
-		// 1 denotes max numer of running kanata processes allowed at a time
-		ProcessSlotCh: make(chan struct{}, 1),
-
-		cmd:               nil,
-		logFile:           nil,
-		manualTermination: false,
-	}
-}
-
-// Terminates running kanata process, if there is one.
-func (r *KanataRunner) Stop() error {
-	if r.cmd != nil {
-		if r.cmd.ProcessState != nil {
-			// process was already killed from outside?
-		} else {
-			r.manualTermination = true
-			fmt.Println("Killing the currently running kanata process...")
-			err := r.cmd.Process.Kill()
-			if err != nil {
-				return fmt.Errorf("cmd.Process.Kill failed: %v", err)
-			}
-		}
-	}
-	r.cmd = nil
-	return nil
-}
-
-func (r *KanataRunner) CleanupLogs() error {
-	if r.cmd != nil && r.cmd.ProcessState == nil {
-		return fmt.Errorf("tried to cleanup logs while kanata process is still running")
-	}
-
-	if r.logFile != nil {
-		os.RemoveAll(r.logFile.Name())
-		r.logFile.Close()
-		r.logFile = nil
-	}
-
-	return nil
-}
-
-func (r *KanataRunner) Run(kanataExecutablePath string, kanataConfigPath string) error {
-	err := r.Stop()
-	if err != nil {
-		return fmt.Errorf("failed to stop the previous process: %v", err)
-	}
-
-	err = r.CleanupLogs()
-	if err != nil {
-		// This is non-critical, we can probably continue operating normally.
-		fmt.Printf("WARN: process logs cleanup failed: %v\n", err)
-	}
-
-	r.logFile, err = os.CreateTemp("", "kanata_lastrun_*.log")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %v", err)
-	}
-	r.cmd = exec.Command(kanataExecutablePath, "-c", kanataConfigPath)
-	r.cmd.Stdout = r.logFile
-	r.cmd.Stderr = r.logFile
-	r.cmd.SysProcAttr = os_specific.ProcessAttr
-
-	go func() {
-		// We're waiting for previous process to be marked as finished in processing loop.
-		// We will know that happens when the process slot becomes writable.
-		r.ProcessSlotCh <- struct{}{}
-
-		fmt.Printf("Running command: %s\n", r.cmd.String())
-
-		err = r.cmd.Start()
-		if err != nil {
-			fmt.Printf("Failed to start process: %v\n", err)
-			return
-		}
-
-		fmt.Printf("Started kanata (pid=%d)\n", r.cmd.Process.Pid)
-
-		err := r.cmd.Wait()
-		if r.manualTermination {
-			r.manualTermination = false
-			r.RetCh <- nil
-		} else {
-			r.RetCh <- err
-		}
-	}()
-
-	return nil
-}
-
 func mainImpl() error {
 	configFolder := configdir.LocalConfig("kanata-tray")
 	fmt.Printf("kanata-tray config folder: %s\n", configFolder)
@@ -163,7 +63,7 @@ func mainImpl() error {
 	}
 
 	menuTemplate := menuTemplateFromConfig(*cfg)
-	runner := NewKanataRunner()
+	runner := runner.NewKanataRunner()
 
 	onReady := func() {
 		app := NewSystrayApp(&menuTemplate)
@@ -285,7 +185,7 @@ type SysTrayApp struct {
 	mStatus      *systray.MenuItem
 	runnerStatus string
 
-	mOpenCrashLog *systray.MenuItem
+	mOpenKanataLogFile *systray.MenuItem
 
 	mConfigs []*systray.MenuItem
 	mExecs   []*systray.MenuItem
@@ -306,8 +206,8 @@ func NewSystrayApp(menuTemplate *MenuTemplate) *SysTrayApp {
 	t.mStatus = systray.AddMenuItem(statusIdle, statusIdle)
 	t.runnerStatus = statusIdle
 
-	t.mOpenCrashLog = systray.AddMenuItem("See Crash Log", "open location of the crash log")
-	t.mOpenCrashLog.Hide()
+	t.mOpenKanataLogFile = systray.AddMenuItem("See Crash Log", "open location of the kanata log")
+	t.mOpenKanataLogFile.Hide()
 
 	systray.AddSeparator()
 
@@ -351,7 +251,7 @@ func NewSystrayApp(menuTemplate *MenuTemplate) *SysTrayApp {
 }
 
 // Switches config, but it doesn't run it.
-func (t *SysTrayApp) switchConfigAndRun(index int, runner *KanataRunner) {
+func (t *SysTrayApp) switchConfigAndRun(index int, runner *runner.KanataRunner) {
 	oldIndex := t.selectedConfig
 	t.selectedConfig = index
 	oldEntry := t.menuTemplate.Configurations[oldIndex]
@@ -366,7 +266,7 @@ func (t *SysTrayApp) switchConfigAndRun(index int, runner *KanataRunner) {
 	t.runWithSelectedOptions(runner)
 }
 
-func (t *SysTrayApp) switchExeAndRun(index int, runner *KanataRunner) {
+func (t *SysTrayApp) switchExeAndRun(index int, runner *runner.KanataRunner) {
 	oldIndex := t.selectedExec
 	t.selectedExec = index
 	oldEntry := t.menuTemplate.Executables[oldIndex]
@@ -381,8 +281,8 @@ func (t *SysTrayApp) switchExeAndRun(index int, runner *KanataRunner) {
 	t.runWithSelectedOptions(runner)
 }
 
-func (t *SysTrayApp) runWithSelectedOptions(runner *KanataRunner) {
-	t.mOpenCrashLog.Hide()
+func (t *SysTrayApp) runWithSelectedOptions(runner *runner.KanataRunner) {
+	t.mOpenKanataLogFile.Hide()
 
 	if t.selectedExec == -1 {
 		fmt.Println("failed to run: no kanata executables available")
@@ -409,7 +309,7 @@ func (t *SysTrayApp) runWithSelectedOptions(runner *KanataRunner) {
 	}
 }
 
-func (t *SysTrayApp) StartProcessingLoop(runner *KanataRunner, runRightAway bool, configFolder string) {
+func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, runRightAway bool, configFolder string) {
 	if runRightAway {
 		t.runWithSelectedOptions(runner)
 	} else {
@@ -423,7 +323,7 @@ func (t *SysTrayApp) StartProcessingLoop(runner *KanataRunner, runRightAway bool
 				fmt.Printf("Kanata process terminated with an error: %v\n", err)
 				t.runnerStatus = statusCrashed
 				t.mStatus.SetTitle(statusCrashed)
-				t.mOpenCrashLog.Show()
+				t.mOpenKanataLogFile.Show()
 				systray.SetIcon(icons.Crash)
 			} else {
 				fmt.Println("Kanata process terminated successfully")
@@ -449,9 +349,14 @@ func (t *SysTrayApp) StartProcessingLoop(runner *KanataRunner, runRightAway bool
 				fmt.Println("Restarting kanata")
 				t.runWithSelectedOptions(runner)
 			}
-		case <-t.mOpenCrashLog.ClickedCh:
-			fmt.Printf("Opening crash log file '%s'\n", runner.logFile.Name())
-			open.Start(runner.logFile.Name())
+		case <-t.mOpenKanataLogFile.ClickedCh:
+			logFile, err := runner.LogFile()
+			if err != nil {
+				fmt.Printf("Can't open log file: %v\n", err)
+			} else {
+				fmt.Printf("Opening log file '%s'\n", logFile)
+				open.Start(logFile)
+			}
 		case i := <-t.cfgChangeCh:
 			t.switchConfigAndRun(i, runner)
 		case i := <-t.exeChangeCh:
