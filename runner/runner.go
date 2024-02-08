@@ -18,7 +18,7 @@ type KanataRunner struct {
 	cmd               *exec.Cmd
 	logFile           *os.File
 	manualTermination bool
-	tcpClient         KanataTcpClient
+	tcpClient         *KanataTcpClient
 }
 
 func NewKanataRunner() KanataRunner {
@@ -49,7 +49,6 @@ func (r *KanataRunner) Stop() error {
 			}
 		}
 	}
-	r.cmd = nil
 	return nil
 }
 
@@ -73,34 +72,37 @@ func (r *KanataRunner) Run(kanataExecutablePath string, kanataConfigPath string)
 		return fmt.Errorf("failed to stop the previous process: %v", err)
 	}
 
-	err = r.CleanupLogs()
-	if err != nil {
-		// This is non-critical, we can probably continue operating normally.
-		fmt.Printf("WARN: process logs cleanup failed: %v\n", err)
-	}
-
-	r.logFile, err = os.CreateTemp("", "kanata_lastrun_*.log")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %v", err)
-	}
-
 	const tcpPort = 5829 // arbitrary number, really
 
-	r.cmd = exec.CommandContext(r.ctx, kanataExecutablePath, "-c", kanataConfigPath, "--port", fmt.Sprint(tcpPort))
-	r.cmd.Stdout = r.logFile
-	r.cmd.Stderr = r.logFile
-	r.cmd.SysProcAttr = os_specific.ProcessAttr
+	cmd := exec.CommandContext(r.ctx, kanataExecutablePath, "-c", kanataConfigPath, "--port", fmt.Sprint(tcpPort))
+	cmd.SysProcAttr = os_specific.ProcessAttr
 
 	go func() {
 		// We're waiting for previous process to be marked as finished in processing loop.
 		// We will know that happens when the process slot becomes writable.
 		r.ProcessSlotCh <- struct{}{}
 
+		err = r.CleanupLogs()
+		if err != nil {
+			// This is non-critical, we can probably continue operating normally.
+			fmt.Printf("WARN: process logs cleanup failed: %v\n", err)
+		}
+
+		r.logFile, err = os.CreateTemp("", "kanata_lastrun_*.log")
+		if err != nil {
+			r.RetCh <- fmt.Errorf("failed to create temp file: %v", err)
+			return
+		}
+
+		r.cmd = cmd
+		r.cmd.Stdout = r.logFile
+		r.cmd.Stderr = r.logFile
+
 		fmt.Printf("Running command: %s\n", r.cmd.String())
 
 		err = r.cmd.Start()
 		if err != nil {
-			fmt.Printf("Failed to start process: %v\n", err)
+			r.RetCh <- fmt.Errorf("failed to start process: %v", err)
 			return
 		}
 
@@ -116,6 +118,7 @@ func (r *KanataRunner) Run(kanataExecutablePath string, kanataConfigPath string)
 		}
 
 		err = r.cmd.Wait()
+		r.cmd = nil
 		cancelTcpConnection()
 		if r.manualTermination {
 			r.manualTermination = false

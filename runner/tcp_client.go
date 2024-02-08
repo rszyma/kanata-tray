@@ -6,19 +6,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 )
 
 type KanataTcpClient struct {
 	ServerMessageCh chan ServerMessage
 
+	mu     sync.Mutex // allow only 1 conn at a time
 	conn   net.Conn
 	dialer net.Dialer
 }
 
-func NewTcpClient() KanataTcpClient {
-	c := KanataTcpClient{
+func NewTcpClient() *KanataTcpClient {
+	c := &KanataTcpClient{
 		ServerMessageCh: make(chan ServerMessage),
+		mu:              sync.Mutex{},
 		dialer: net.Dialer{
 			Timeout: time.Second * 3,
 		},
@@ -27,13 +30,16 @@ func NewTcpClient() KanataTcpClient {
 }
 
 func (c *KanataTcpClient) Connect(ctx context.Context, port int) error {
+	c.mu.Lock()
 	var err error
 	c.conn, err = c.dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
-		return fmt.Errorf("tcp dial: %v", err)
+		c.mu.Unlock()
+		return err
 	}
 	fmt.Printf("Connected to kanata via TCP (%s)\n", c.conn.LocalAddr().String())
 	go func() {
+		defer c.mu.Unlock()
 		scanner := bufio.NewScanner(c.conn)
 		for scanner.Scan() {
 			var msgBytes = scanner.Bytes()
