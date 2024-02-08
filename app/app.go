@@ -158,8 +158,16 @@ func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, runRightAw
 		systray.SetIcon(icons.Pause)
 	}
 
+	serverMessageCh := runner.ServerMessageCh()
+
 	for {
 		select {
+		case event := <-serverMessageCh:
+			fmt.Println("Received an event from kanata!")
+			if event.LayerChange != nil {
+				newLayer := event.LayerChange.NewLayer
+				fmt.Printf("newLayer: %s\n", newLayer)
+			}
 		case err := <-runner.RetCh:
 			if err != nil {
 				fmt.Printf("Kanata process terminated with an error: %v\n", err)
