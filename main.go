@@ -14,6 +14,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 
 	"github.com/rszyma/kanata-tray/icons"
+	"github.com/rszyma/kanata-tray/os_specific"
 )
 
 func main() {
@@ -118,6 +119,7 @@ func (r *KanataRunner) Run(kanataExecutablePath string, kanataConfigPath string)
 	r.cmd = exec.Command(kanataExecutablePath, "-c", kanataConfigPath)
 	r.cmd.Stdout = r.logFile
 	r.cmd.Stderr = r.logFile
+	r.cmd.SysProcAttr = os_specific.ProcessAttr
 
 	go func() {
 		// We're waiting for previous process to be marked as finished in processing loop.
