@@ -60,6 +60,9 @@ executables = [
     
 ]
 
+[layer_icons]
+
+
 [general]
 include_executables_from_system_path = true
 include_configs_from_default_locations = true
