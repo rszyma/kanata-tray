@@ -24,15 +24,15 @@ func main() {
 }
 
 type Config struct {
-	Configurations []string
-	Executables    []string
-	General        GeneralConfigOptions
+	Configurations []string             `toml:"configurations"`
+	Executables    []string             `toml:"executables"`
+	General        GeneralConfigOptions `toml:"general"`
 }
 
 type GeneralConfigOptions struct {
-	IncludeExecutablesFromSystemPath   bool
-	IncludeConfigsFromDefaultLocations bool
-	LaunchOnStart                      bool
+	IncludeExecutablesFromSystemPath   bool `toml:"include_executables_from_system_path"`
+	IncludeConfigsFromDefaultLocations bool `toml:"include_configs_from_default_locations"`
+	LaunchOnStart                      bool `toml:"launch_on_start"`
 }
 
 type MenuTemplate struct {
@@ -471,19 +471,14 @@ func (t *SysTrayApp) StartProcessingLoop(runner *KanataRunner, runRightAway bool
 }
 
 func readConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
-	var cfg *Config = &Config{
-		General: GeneralConfigOptions{
-			IncludeExecutablesFromSystemPath:   true,
-			IncludeConfigsFromDefaultLocations: true,
-			LaunchOnStart:                      true,
-		},
+	var cfg *Config = &Config{}
+	err := toml.Unmarshal([]byte(defaultCfg), &cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse default config: %v", err)
 	}
+
 	// Does the file not exist?
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
-		err := toml.Unmarshal([]byte(defaultCfg), &cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse default config: %v", err)
-		}
 		fmt.Printf("Config file doesn't exist. Creating default config. Path: '%s'\n", configFilePath)
 		os.WriteFile(configFilePath, []byte(defaultCfg), os.FileMode(0600))
 	} else {
