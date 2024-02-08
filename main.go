@@ -380,6 +380,17 @@ func (t *SysTrayApp) switchExeAndRun(index int, runner *KanataRunner) {
 
 func (t *SysTrayApp) runWithSelectedOptions(runner *KanataRunner) {
 	t.mOpenCrashLog.Hide()
+
+	if t.selectedExec == -1 {
+		fmt.Println("failed to run: no kanata executables available")
+		return
+	}
+
+	if t.selectedConfig == -1 {
+		fmt.Println("failed to run: no kanata configs available")
+		return
+	}
+
 	systray.SetIcon(icons.Default)
 
 	execPath := t.menuTemplate.Executables[t.selectedExec].Value
