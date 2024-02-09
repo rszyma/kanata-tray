@@ -1,4 +1,4 @@
-package runner
+package os_specific
 
 import "syscall"
 
