@@ -1,6 +1,6 @@
 module github.com/rszyma/kanata-tray
 
-go 1.21.6
+go 1.21
 
 require (
 	github.com/getlantern/systray v1.2.2
