@@ -20,6 +20,7 @@ const selectedItemPrefix = "> "
 
 type SysTrayApp struct {
 	menuTemplate   *MenuTemplate
+	layerIcons     LayerIcons
 	selectedConfig int
 	selectedExec   int
 	cfgChangeCh    chan int
@@ -39,8 +40,8 @@ type SysTrayApp struct {
 	mQuit    *systray.MenuItem
 }
 
-func NewSystrayApp(menuTemplate *MenuTemplate) *SysTrayApp {
-	t := &SysTrayApp{menuTemplate: menuTemplate, selectedConfig: -1, selectedExec: -1}
+func NewSystrayApp(menuTemplate *MenuTemplate, layerIcons LayerIcons) *SysTrayApp {
+	t := &SysTrayApp{menuTemplate: menuTemplate, layerIcons: layerIcons, selectedConfig: -1, selectedExec: -1}
 
 	systray.SetIcon(icons.Default)
 	systray.SetTitle("kanata-tray")
@@ -158,8 +159,16 @@ func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, runRightAw
 		systray.SetIcon(icons.Pause)
 	}
 
+	serverMessageCh := runner.ServerMessageCh()
+
 	for {
 		select {
+		case event := <-serverMessageCh:
+			// fmt.Println("Received an event from kanata!")
+			if event.LayerChange != nil {
+				icon := t.layerIcons.IconForLayerName(event.LayerChange.NewLayer)
+				systray.SetIcon(icon)
+			}
 		case err := <-runner.RetCh:
 			if err != nil {
 				fmt.Printf("Kanata process terminated with an error: %v\n", err)

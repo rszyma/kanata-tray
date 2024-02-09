@@ -9,6 +9,7 @@ import (
 
 	"github.com/rszyma/kanata-tray/app"
 	"github.com/rszyma/kanata-tray/config"
+	"github.com/rszyma/kanata-tray/icons"
 	"github.com/rszyma/kanata-tray/runner"
 )
 
@@ -22,10 +23,19 @@ func main() {
 func mainImpl() error {
 	configFolder := configdir.LocalConfig("kanata-tray")
 	fmt.Printf("kanata-tray config folder: %s\n", configFolder)
-	err := configdir.MakePath(configFolder) // No-op if exists, create if doesn't.
+
+	// Create folder. No-op if exists.
+	err := configdir.MakePath(configFolder)
 	if err != nil {
-		return fmt.Errorf("failed to make path for config file: %v", err)
+		return fmt.Errorf("failed to create folder: %v", err)
 	}
+
+	// Make sure "icons" folder exists too.
+	err = configdir.MakePath(filepath.Join(configFolder, "icons"))
+	if err != nil {
+		return fmt.Errorf("failed to create folder: %v", err)
+	}
+
 	configFile := filepath.Join(configFolder, "config.toml")
 
 	cfg, err := config.ReadConfigOrCreateIfNotExist(configFile)
@@ -34,10 +44,11 @@ func mainImpl() error {
 	}
 
 	menuTemplate := app.MenuTemplateFromConfig(*cfg)
+	layerIcons := app.ResolveIcons(configFolder, cfg.LayerIcons, icons.Default)
 	runner := runner.NewKanataRunner()
 
 	onReady := func() {
-		app := app.NewSystrayApp(&menuTemplate)
+		app := app.NewSystrayApp(&menuTemplate, layerIcons)
 		go app.StartProcessingLoop(&runner, cfg.General.LaunchOnStart, configFolder)
 	}
 

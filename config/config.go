@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Configurations []string             `toml:"configurations"`
 	Executables    []string             `toml:"executables"`
+	LayerIcons     map[string]string    `toml:"layer_icons"`
 	General        GeneralConfigOptions `toml:"general"`
 }
 
@@ -59,6 +60,9 @@ configurations = [
 executables = [
     
 ]
+
+[layer_icons]
+
 
 [general]
 include_executables_from_system_path = true
