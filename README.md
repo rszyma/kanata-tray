@@ -1,7 +1,7 @@
 # kanata-tray
 
 A simple wrapper for [kanata](https://github.com/jtroo/kanata) to control it from tray icon. 
-Works on Windows and Linux. I've no way to test on macOS, but it's likely that it will work there too.
+Works on Windows and Linux.
 
 ## Features
 
@@ -58,11 +58,11 @@ Notes about autorun:
 
 Minimal supported version of kanata is the release after `v1.5.0`.
 
-More specifically, after commit [010338b](https://github.com/jtroo/kanata/commit/010338b14d0020098b9263a615ef2152c249d666) (because it fixed an issue with TCP server) 
+More specifically, builds after commit [010338b](https://github.com/jtroo/kanata/commit/010338b14d0020098b9263a615ef2152c249d666) (because it fixed an issue with TCP server) 
 
-## Dependencies
+## Linux Dependencies
 
-Make sure to install required packages first:
+For Linux, make sure to install required packages first:
 
 ### Arch:
 ```bash
@@ -71,7 +71,7 @@ pacman -S libayatana-appindicator
 
 also if you want to build from source:
 ```bash
-pacman -S base-devel gtk3 go
+pacman -S base-devel gtk3 go just
 ``` 
 
 ### Ubuntu:
@@ -81,14 +81,11 @@ sudo apt-get install libayatana-appindicator3-dev
 
 also if you want to build from source:
 ```bash
-sudo apt-get install gcc libgtk-3-dev golang
+sudo apt-get install gcc libgtk-3-dev golang just
 ```
 
-### Windows:
+## Installation
 
-No need to install any dependencies on Windows.
+Prebuild binaries for Windows and Linux: [releases page](https://github.com/rszyma/kanata-tray/releases/latest)
 
-## Building 
-
-See [justfile](./justfile)
- 
+To build from source see recipes in [justfile](./justfile).
