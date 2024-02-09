@@ -1,0 +1,36 @@
+name: release
+on:
+  push:
+    branches: main
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release: 
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+        
+      - name: Install dependencies
+        run: |
+          sudo apt-get install libayatana-appindicator3-dev
+
+      - name: Build
+        run: |
+          just build_release_linux ${{github.ref}}
+          just build_release_windows ${{github.ref}}
+          
+      - name: Release 
+        uses: softprops/action-gh-release@v1 
+        with: 
+          draft: false 
+          prerelease: false 
+          files: |
+            ./dist/kanata-tray.exe
+            ./dist/kanata-tray
+            LICENSE

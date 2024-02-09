@@ -1,8 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/getlantern/systray"
 	"github.com/kirsle/configdir"
@@ -13,10 +16,29 @@ import (
 	"github.com/rszyma/kanata-tray/runner"
 )
 
+var (
+	buildVersion string
+	buildHash    string
+	buildDate    string
+)
+
+var version = flag.Bool("version", false, "Print the version and exit")
+
 func main() {
+	flag.Parse()
+	if *version {
+		fmt.Printf("kanata-tray %s\n", buildVersion)
+		fmt.Printf("Commit Hash: %s\n", buildHash)
+		fmt.Printf("Build Date: %s\n", buildDate)
+		fmt.Printf("OS: %s\n", runtime.GOOS)
+		fmt.Printf("Arch: %s\n", runtime.GOARCH)
+		os.Exit(1)
+	}
+
 	err := mainImpl()
 	if err != nil {
-		panic(err)
+		fmt.Printf("kanata-tray exited with an error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
