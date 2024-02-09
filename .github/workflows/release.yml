@@ -1,7 +1,6 @@
 name: release
 on:
   push:
-    branches: main
     tags:
       - "v*.*.*"
 
@@ -20,6 +19,9 @@ jobs:
         run: |
           sudo apt-get install libayatana-appindicator3-dev
 
+      - name: Install just
+        uses: taiki-e/install-action@just
+          
       - name: Build
         run: |
           just build_release_linux ${{github.ref}}
