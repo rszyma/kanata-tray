@@ -6,6 +6,7 @@ import (
 	"github.com/getlantern/systray"
 	"github.com/skratchdot/open-golang/open"
 
+	"github.com/rszyma/kanata-tray/app/notifications"
 	"github.com/rszyma/kanata-tray/icons"
 	"github.com/rszyma/kanata-tray/runner"
 )
@@ -23,8 +24,9 @@ type SysTrayApp struct {
 	layerIcons     LayerIcons
 	selectedConfig int
 	selectedExec   int
-	cfgChangeCh    chan int
-	exeChangeCh    chan int
+
+	cfgChangeCh chan int
+	exeChangeCh chan int
 
 	// Menu items
 
@@ -41,7 +43,12 @@ type SysTrayApp struct {
 }
 
 func NewSystrayApp(menuTemplate *MenuTemplate, layerIcons LayerIcons) *SysTrayApp {
-	t := &SysTrayApp{menuTemplate: menuTemplate, layerIcons: layerIcons, selectedConfig: -1, selectedExec: -1}
+	t := &SysTrayApp{
+		menuTemplate:   menuTemplate,
+		layerIcons:     layerIcons,
+		selectedConfig: -1,
+		selectedExec:   -1,
+	}
 
 	systray.SetIcon(icons.Default)
 	systray.SetTitle("kanata-tray")
@@ -152,7 +159,7 @@ func (t *SysTrayApp) runWithSelectedOptions(runner *runner.KanataRunner) {
 	}
 }
 
-func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, runRightAway bool, configFolder string) {
+func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, notifier notifications.INotifier, runRightAway bool, configFolder string) {
 	if runRightAway {
 		t.runWithSelectedOptions(runner)
 	} else {
@@ -166,8 +173,10 @@ func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, runRightAw
 		case event := <-serverMessageCh:
 			// fmt.Println("Received an event from kanata!")
 			if event.LayerChange != nil {
-				icon := t.layerIcons.IconForLayerName(event.LayerChange.NewLayer)
+				newLayer := event.LayerChange.NewLayer
+				icon := t.layerIcons.IconForLayerName(newLayer)
 				systray.SetIcon(icon)
+				notifier.LayerChange(newLayer)
 			}
 		case err := <-runner.RetCh:
 			if err != nil {

@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/getlantern/systray"
 	"github.com/kirsle/configdir"
 
 	"github.com/rszyma/kanata-tray/app"
+	"github.com/rszyma/kanata-tray/app/notifications"
 	"github.com/rszyma/kanata-tray/config"
 	"github.com/rszyma/kanata-tray/icons"
 	"github.com/rszyma/kanata-tray/runner"
@@ -69,9 +71,16 @@ func mainImpl() error {
 	layerIcons := app.ResolveIcons(configFolder, cfg.LayerIcons, icons.Default)
 	runner := runner.NewKanataRunner()
 
+	var notifier notifications.INotifier
+	notifier, err = notifications.InitGtkOverlay(300, 50, 0, 70, 1*time.Second)
+	if err != nil {
+		fmt.Printf("Failed to initialize gtk notifications window. Layer change notifications will be disabled. Error: %v\n", err)
+		notifier = &notifications.Disabled{}
+	}
+
 	onReady := func() {
 		app := app.NewSystrayApp(&menuTemplate, layerIcons)
-		go app.StartProcessingLoop(&runner, cfg.General.LaunchOnStart, configFolder)
+		go app.StartProcessingLoop(&runner, notifier, cfg.General.LaunchOnStart, configFolder)
 	}
 
 	onExit := func() {
