@@ -6,7 +6,7 @@ _:
 run_minimal:
     CGO_ENABLED=1 GO111MODULE=on go run .
 
-# build and run with "gtk_overlay" feature (clean build takes 5x longer than 'run')
+# build and run with "gtk_overlay" feature (clean build takes 5x longer than 'run_minimal')
 run:
     CGO_ENABLED=1 GO111MODULE=on go run -tags=gtk_overlay .
 
