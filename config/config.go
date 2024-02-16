@@ -12,7 +12,17 @@ type Config struct {
 	Configurations []string             `toml:"configurations"`
 	Executables    []string             `toml:"executables"`
 	LayerIcons     map[string]string    `toml:"layer_icons"`
+	Overlay        OverlaySettings      `toml:"overlay"`
 	General        GeneralConfigOptions `toml:"general"`
+}
+
+type OverlaySettings struct {
+	Enable   bool `toml:"enable"`
+	Width    int  `toml:"width"`
+	Height   int  `toml:"height"`
+	OffsetX  int  `toml:"offset_x"`
+	OffsetY  int  `toml:"offset_y"`
+	Duration int  `toml:"duration"`
 }
 
 type GeneralConfigOptions struct {
@@ -64,8 +74,17 @@ executables = [
 [layer_icons]
 
 
+[overlay]
+enable = false
+width = 300
+height = 100
+offset_x = 0
+offset_y = 70
+duration = 1000
+
 [general]
 include_executables_from_system_path = true
 include_configs_from_default_locations = true
 launch_on_start = true
+
 `

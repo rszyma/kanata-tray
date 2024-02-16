@@ -17,7 +17,8 @@ type GtkOverlay struct {
 	refreshWindowVisibilityDuration chan time.Time
 }
 
-func InitGtkOverlay(width int, height int, positionOffsetX int, positionOffsetY int, visibilityDuration time.Duration) (*GtkOverlay, error) {
+func InitGtkOverlay(width int, height int, positionOffsetX int, positionOffsetY int, visibilityDurationMs int) (*GtkOverlay, error) {
+	fmt.Println("Initializing gtk")
 	gtk.Init(nil)
 
 	// Create a new window
@@ -87,7 +88,7 @@ func InitGtkOverlay(width int, height int, positionOffsetX int, positionOffsetY 
 	go gtk.Main()
 
 	return &GtkOverlay{
-		windowVisibilityDuration:        visibilityDuration,
+		windowVisibilityDuration:        time.Millisecond * time.Duration(visibilityDurationMs),
 		label:                           label,
 		refreshWindowVisibilityDuration: refreshVisibilityCh,
 	}, nil

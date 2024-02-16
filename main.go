@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
 
 	"github.com/getlantern/systray"
 	"github.com/kirsle/configdir"
@@ -71,11 +70,18 @@ func mainImpl() error {
 	layerIcons := app.ResolveIcons(configFolder, cfg.LayerIcons, icons.Default)
 	runner := runner.NewKanataRunner()
 
-	var notifier notifications.INotifier
-	notifier, err = notifications.InitGtkOverlay(300, 50, 0, 70, 1*time.Second)
-	if err != nil {
-		fmt.Printf("Failed to initialize gtk notifications window. Layer change notifications will be disabled. Error: %v\n", err)
-		notifier = &notifications.Disabled{}
+	var notifier notifications.INotifier = &notifications.Disabled{}
+	if cfg.Overlay.Enable {
+		n, err := notifications.InitGtkOverlay(
+			cfg.Overlay.Width, cfg.Overlay.Height,
+			cfg.Overlay.OffsetX, cfg.Overlay.OffsetY, cfg.Overlay.Duration,
+		)
+		if err != nil {
+			fmt.Printf("Failed to initialize gtk notifications window. "+
+				"Layer change notifications will be disabled. Error: %v\n", err)
+		} else {
+			notifier = n
+		}
 	}
 
 	onReady := func() {
