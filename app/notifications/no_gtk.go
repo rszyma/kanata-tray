@@ -1,4 +1,4 @@
-//go:build !gtk_overlay
+//go:build no_gtk_overlay
 
 package notifications
 

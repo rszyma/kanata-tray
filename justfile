@@ -2,16 +2,16 @@
 _:
     @just -l --unsorted
 
-# build and run without "gtk_overlay" feature
+# build and run with "no_gtk_overlay" tag (clean build a lot faster compared to building with gtk)
 run_minimal:
+    CGO_ENABLED=1 GO111MODULE=on go run -tags=no_gtk_overlay .
+
+# build and run without "no_gtk_overlay" feature 
+run:
     CGO_ENABLED=1 GO111MODULE=on go run .
 
-# build and run with "gtk_overlay" feature (clean build takes 5x longer than 'run_minimal')
-run:
-    CGO_ENABLED=1 GO111MODULE=on go run -tags=gtk_overlay .
-
 [linux]
-build_release tags="gtk_overlay" version="latest":
+build_release tags="," version="latest":
     #!/bin/bash
 
     buildHash=$(git rev-parse HEAD)
@@ -26,7 +26,7 @@ build_release tags="gtk_overlay" version="latest":
     go build -v -tags {{tags}} -ldflags "$ldflags" -trimpath -o "$outputPath"
 
 [windows]
-build_release tags="gtk_overlay" version="latest":
+build_release tags="," version="latest":
     #!powershell
     
     $buildHash = $(git rev-parse HEAD)
