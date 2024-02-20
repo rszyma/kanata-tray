@@ -23,8 +23,10 @@ type SysTrayApp struct {
 	layerIcons     LayerIcons
 	selectedConfig int
 	selectedExec   int
-	cfgChangeCh    chan int
-	exeChangeCh    chan int
+	tcpPort        int
+
+	cfgChangeCh chan int
+	exeChangeCh chan int
 
 	// Menu items
 
@@ -40,8 +42,8 @@ type SysTrayApp struct {
 	mQuit    *systray.MenuItem
 }
 
-func NewSystrayApp(menuTemplate *MenuTemplate, layerIcons LayerIcons) *SysTrayApp {
-	t := &SysTrayApp{menuTemplate: menuTemplate, layerIcons: layerIcons, selectedConfig: -1, selectedExec: -1}
+func NewSystrayApp(menuTemplate *MenuTemplate, layerIcons LayerIcons, tcpPort int) *SysTrayApp {
+	t := &SysTrayApp{menuTemplate: menuTemplate, layerIcons: layerIcons, selectedConfig: -1, selectedExec: -1, tcpPort: tcpPort}
 
 	systray.SetIcon(icons.Default)
 	systray.SetTitle("kanata-tray")
@@ -141,7 +143,7 @@ func (t *SysTrayApp) runWithSelectedOptions(runner *runner.KanataRunner) {
 
 	execPath := t.menuTemplate.Executables[t.selectedExec].Value
 	configPath := t.menuTemplate.Configurations[t.selectedConfig].Value
-	err := runner.Run(execPath, configPath)
+	err := runner.Run(execPath, configPath, t.tcpPort)
 	if err != nil {
 		fmt.Printf("runner.Run failed with: %v\n", err)
 		t.runnerStatus = statusCrashed

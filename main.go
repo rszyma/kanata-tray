@@ -70,7 +70,7 @@ func mainImpl() error {
 	runner := runner.NewKanataRunner()
 
 	onReady := func() {
-		app := app.NewSystrayApp(&menuTemplate, layerIcons)
+		app := app.NewSystrayApp(&menuTemplate, layerIcons, cfg.General.TcpPort)
 		go app.StartProcessingLoop(&runner, cfg.General.LaunchOnStart, configFolder)
 	}
 

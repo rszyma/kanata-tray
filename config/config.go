@@ -19,6 +19,7 @@ type GeneralConfigOptions struct {
 	IncludeExecutablesFromSystemPath   bool `toml:"include_executables_from_system_path"`
 	IncludeConfigsFromDefaultLocations bool `toml:"include_configs_from_default_locations"`
 	LaunchOnStart                      bool `toml:"launch_on_start"`
+	TcpPort                            int  `toml:"tcp_port"`
 }
 
 func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
@@ -68,4 +69,5 @@ executables = [
 include_executables_from_system_path = true
 include_configs_from_default_locations = true
 launch_on_start = true
+tcp_port = 5829
 `

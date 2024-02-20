@@ -41,6 +41,7 @@ qwerty = "qwerty.ico"
 include_executables_from_system_path = false # default: true
 include_configs_from_default_locations = false # default: true
 launch_on_start = true # default: true
+tcp_port = 5829 # default: 5829
 ```
 
 Notes:

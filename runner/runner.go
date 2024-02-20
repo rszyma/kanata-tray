@@ -66,13 +66,11 @@ func (r *KanataRunner) CleanupLogs() error {
 	return nil
 }
 
-func (r *KanataRunner) Run(kanataExecutablePath string, kanataConfigPath string) error {
+func (r *KanataRunner) Run(kanataExecutablePath string, kanataConfigPath string, tcpPort int) error {
 	err := r.Stop()
 	if err != nil {
 		return fmt.Errorf("failed to stop the previous process: %v", err)
 	}
-
-	const tcpPort = 5829 // arbitrary number, really
 
 	cmd := exec.CommandContext(r.ctx, kanataExecutablePath, "-c", kanataConfigPath, "--port", fmt.Sprint(tcpPort))
 	cmd.SysProcAttr = os_specific.ProcessAttr
