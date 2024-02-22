@@ -85,6 +85,11 @@ also if you want to build from source:
 sudo apt-get install gcc libgtk-3-dev golang just
 ```
 
+### OpenSUSE Tumbleweed:
+```bash
+sudo zypper in libayatana-appindicator3-devel
+```
+
 ## Installation
 
 Prebuild binaries for Windows and Linux: [releases page](https://github.com/rszyma/kanata-tray/releases/latest)
