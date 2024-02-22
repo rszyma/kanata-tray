@@ -26,13 +26,13 @@ type MenuEntry struct {
 func MenuTemplateFromConfig(cfg config.Config) MenuTemplate {
 	var result MenuTemplate
 
-	if cfg.General.IncludeExecutablesFromSystemPath {
+	if cfg.General.IncludeConfigsFromDefaultLocations {
 		defaultKanataConfig := filepath.Join(configdir.LocalConfig("kanata"), "kanata.kbd")
 		cfg.Configurations = append(cfg.Configurations, defaultKanataConfig)
 	}
 	for i := range cfg.Configurations {
 		path := cfg.Configurations[i]
-		expandedPath, err := resolveConfigPath(path)
+		expandedPath, err := resolveFilePath(path)
 		entry := MenuEntry{
 			IsSelectable: true,
 			Title:        "Config: " + path,
@@ -56,7 +56,7 @@ func MenuTemplateFromConfig(cfg config.Config) MenuTemplate {
 	}
 	for i := range cfg.Executables {
 		path := cfg.Executables[i]
-		expandedPath, err := resolveConfigPath(path)
+		expandedPath, err := resolveFilePath(path)
 		entry := MenuEntry{
 			IsSelectable: true,
 			Title:        "Exe: " + path,
@@ -75,7 +75,7 @@ func MenuTemplateFromConfig(cfg config.Config) MenuTemplate {
 	return result
 }
 
-func resolveConfigPath(path string) (string, error) {
+func resolveFilePath(path string) (string, error) {
 	path, err := expandHomeDir(path)
 	if err != nil {
 		return "", fmt.Errorf("expandHomeDir: %v", err)
