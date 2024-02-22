@@ -66,7 +66,7 @@ func (r *KanataRunner) CleanupLogs() error {
 	return nil
 }
 
-func (r *KanataRunner) Run(kanataExecutablePath string, kanataConfigPath string, tcpPort int) error {
+func (r *KanataRunner) RunNonblocking(kanataExecutablePath string, kanataConfigPath string, tcpPort int) error {
 	err := r.Stop()
 	if err != nil {
 		return fmt.Errorf("failed to stop the previous process: %v", err)
@@ -110,9 +110,30 @@ func (r *KanataRunner) Run(kanataExecutablePath string, kanataConfigPath string,
 		// Need to wait until kanata boot up and setups the TCP server.
 		// 2000 ms is default boot delay in kanata.
 		time.Sleep(time.Millisecond * 2100)
-		err := r.tcpClient.Connect(tcpConnectionCtx, tcpPort)
+
+		go func() {
+			r.tcpClient.reconnect <- struct{}{} // this shoudn't block, because reconnect chan should have 1-len buffer
+			// Loop in order to reconnect when kanata disconnects us.
+			// We might be disconnected if an older version of kanata is used.
+			for {
+				select {
+				case <-tcpConnectionCtx.Done():
+					return
+				case <-r.tcpClient.reconnect:
+					err := r.tcpClient.Connect(tcpConnectionCtx, tcpPort)
+					if err != nil {
+						fmt.Printf("Failed to connect to kanata via TCP: %v\n", err)
+					}
+				}
+			}
+		}()
+
+		// Send request for layer names. We may or may not get response
+		// depending on kanata version). The support for it was implemented in:
+		// https://github.com/jtroo/kanata/commit/d66c3c77bcb3acbf58188272177d64bed4130b6e
+		err = r.SendClientMessage(ClientMessage{RequestLayerNames: struct{}{}})
 		if err != nil {
-			fmt.Printf("Failed to connect to kanata via TCP: %v\n", err)
+			fmt.Printf("Failed to send ClientMessage: %v\n", err)
 		}
 
 		err = r.cmd.Wait()
@@ -138,4 +159,19 @@ func (r *KanataRunner) LogFile() (string, error) {
 
 func (r *KanataRunner) ServerMessageCh() chan ServerMessage {
 	return r.tcpClient.ServerMessageCh
+}
+
+// If currently there's no opened TCP connection, an error will be returned.
+func (r *KanataRunner) SendClientMessage(msg ClientMessage) error {
+	timeout := 200 * time.Millisecond
+	timer := time.NewTimer(timeout)
+	select {
+	case <-timer.C:
+		return fmt.Errorf("timeouted after %d ms", timeout.Milliseconds())
+	case r.tcpClient.clientMessageCh <- msg:
+		if !timer.Stop() {
+			<-timer.C
+		}
+	}
+	return nil
 }

@@ -21,6 +21,14 @@ func (c LayerIcons) IconForLayerName(layerName string) []byte {
 	}
 }
 
+func (c LayerIcons) MappedLayers() []string {
+	var res []string
+	for layerName := range c.layerIcons {
+		res = append(res, layerName)
+	}
+	return res
+}
+
 func ResolveIcons(configFolder string, unvalidatedLayerIcons map[string]string, defaultFallbackIcon []byte) LayerIcons {
 	customIconsFolder := filepath.Join(configFolder, "icons")
 	var layerIcons = make(map[string][]byte)

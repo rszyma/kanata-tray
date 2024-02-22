@@ -67,7 +67,7 @@ func MenuTemplateFromConfig(cfg config.Config) MenuTemplate {
 			entry.IsSelectable = false
 			entry.Title = "[ERR] " + entry.Title
 			entry.Tooltip = fmt.Sprintf("error: %s", err)
-			fmt.Printf("Error for kanata config file '%s': %v\n", path, err)
+			fmt.Printf("Error for kanata exe '%s': %v\n", path, err)
 		}
 		result.Executables = append(result.Executables, entry)
 	}

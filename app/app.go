@@ -7,7 +7,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 
 	"github.com/rszyma/kanata-tray/icons"
-	"github.com/rszyma/kanata-tray/runner"
+	runner_pkg "github.com/rszyma/kanata-tray/runner"
 )
 
 const (
@@ -96,7 +96,7 @@ func NewSystrayApp(menuTemplate *MenuTemplate, layerIcons LayerIcons, tcpPort in
 	return t
 }
 
-func (t *SysTrayApp) switchConfigAndRun(index int, runner *runner.KanataRunner) {
+func (t *SysTrayApp) switchConfigAndRun(index int, runner *runner_pkg.KanataRunner) {
 	oldIndex := t.selectedConfig
 	t.selectedConfig = index
 	oldEntry := t.menuTemplate.Configurations[oldIndex]
@@ -111,7 +111,7 @@ func (t *SysTrayApp) switchConfigAndRun(index int, runner *runner.KanataRunner) 
 	t.runWithSelectedOptions(runner)
 }
 
-func (t *SysTrayApp) switchExeAndRun(index int, runner *runner.KanataRunner) {
+func (t *SysTrayApp) switchExeAndRun(index int, runner *runner_pkg.KanataRunner) {
 	oldIndex := t.selectedExec
 	t.selectedExec = index
 	oldEntry := t.menuTemplate.Executables[oldIndex]
@@ -126,7 +126,7 @@ func (t *SysTrayApp) switchExeAndRun(index int, runner *runner.KanataRunner) {
 	t.runWithSelectedOptions(runner)
 }
 
-func (t *SysTrayApp) runWithSelectedOptions(runner *runner.KanataRunner) {
+func (t *SysTrayApp) runWithSelectedOptions(runner *runner_pkg.KanataRunner) {
 	t.mOpenKanataLogFile.Hide()
 
 	if t.selectedExec == -1 {
@@ -143,20 +143,20 @@ func (t *SysTrayApp) runWithSelectedOptions(runner *runner.KanataRunner) {
 
 	execPath := t.menuTemplate.Executables[t.selectedExec].Value
 	configPath := t.menuTemplate.Configurations[t.selectedConfig].Value
-	err := runner.Run(execPath, configPath, t.tcpPort)
+	err := runner.RunNonblocking(execPath, configPath, t.tcpPort)
 	if err != nil {
 		fmt.Printf("runner.Run failed with: %v\n", err)
 		t.runnerStatus = statusCrashed
 		t.mStatus.SetTitle(statusCrashed)
-	} else {
-		t.runnerStatus = statusRunning
-		t.mStatus.SetTitle(statusRunning)
+		return
 	}
+	t.runnerStatus = statusRunning
+	t.mStatus.SetTitle(statusRunning)
 }
 
-func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, runRightAway bool, configFolder string) {
+func (app *SysTrayApp) StartProcessingLoop(runner *runner_pkg.KanataRunner, runRightAway bool, configFolder string) {
 	if runRightAway {
-		t.runWithSelectedOptions(runner)
+		app.runWithSelectedOptions(runner)
 	} else {
 		systray.SetIcon(icons.Pause)
 	}
@@ -166,43 +166,58 @@ func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, runRightAw
 	for {
 		select {
 		case event := <-serverMessageCh:
-			// fmt.Println("Received an event from kanata!")
+			// fmt.Printf("Received an event from kanata: %v\n", pp.Sprint(event))
 			if event.LayerChange != nil {
-				icon := t.layerIcons.IconForLayerName(event.LayerChange.NewLayer)
+				icon := app.layerIcons.IconForLayerName(event.LayerChange.NewLayer)
 				systray.SetIcon(icon)
+			}
+			if event.LayerNames != nil {
+				mappedLayers := app.layerIcons.MappedLayers()
+				for _, mappedLayerName := range mappedLayers {
+					found := false
+					for _, kanataLayerName := range event.LayerNames.Names {
+						if mappedLayerName == kanataLayerName {
+							found = true
+							break
+						}
+					}
+					if !found {
+						fmt.Printf("Layer '%s' is mapped to an icon, but doesn't exist in the loaded kanata config\n", mappedLayerName)
+					}
+				}
 			}
 		case err := <-runner.RetCh:
 			if err != nil {
 				fmt.Printf("Kanata process terminated with an error: %v\n", err)
-				t.runnerStatus = statusCrashed
-				t.mStatus.SetTitle(statusCrashed)
-				t.mOpenKanataLogFile.Show()
+				app.runnerStatus = statusCrashed
+				app.mStatus.SetTitle(statusCrashed)
+				app.mOpenKanataLogFile.Show()
 				systray.SetIcon(icons.Crash)
 			} else {
 				fmt.Println("Kanata process terminated successfully")
 			}
 			<-runner.ProcessSlotCh // free 1 slot
-		case <-t.mStatus.ClickedCh:
-			switch t.runnerStatus {
+		case <-app.mStatus.ClickedCh:
+			switch app.runnerStatus {
 			case statusIdle:
 				// run kanata
-				t.runWithSelectedOptions(runner)
+				app.runWithSelectedOptions(runner)
 			case statusRunning:
 				// stop kanata
 				err := runner.Stop()
 				if err != nil {
 					fmt.Printf("Failed to stop kanata process: %v", err)
 				} else {
-					t.runnerStatus = statusIdle
-					t.mStatus.SetTitle(statusIdle)
+					app.runnerStatus = statusIdle
+					app.mStatus.SetTitle(statusIdle)
 					systray.SetIcon(icons.Pause)
 				}
 			case statusCrashed:
 				// restart kanata
 				fmt.Println("Restarting kanata")
-				t.runWithSelectedOptions(runner)
+				app.runWithSelectedOptions(runner)
 			}
-		case <-t.mOpenKanataLogFile.ClickedCh:
+		case <-app.mOpenKanataLogFile.ClickedCh:
 			logFile, err := runner.LogFile()
 			if err != nil {
 				fmt.Printf("Can't open log file: %v\n", err)
@@ -210,13 +225,13 @@ func (t *SysTrayApp) StartProcessingLoop(runner *runner.KanataRunner, runRightAw
 				fmt.Printf("Opening log file '%s'\n", logFile)
 				open.Start(logFile)
 			}
-		case i := <-t.cfgChangeCh:
-			t.switchConfigAndRun(i, runner)
-		case i := <-t.exeChangeCh:
-			t.switchExeAndRun(i, runner)
-		case <-t.mOptions.ClickedCh:
+		case i := <-app.cfgChangeCh:
+			app.switchConfigAndRun(i, runner)
+		case i := <-app.exeChangeCh:
+			app.switchExeAndRun(i, runner)
+		case <-app.mOptions.ClickedCh:
 			open.Start(configFolder)
-		case <-t.mQuit.ClickedCh:
+		case <-app.mQuit.ClickedCh:
 			fmt.Println("Exiting...")
 			err := runner.Stop()
 			if err != nil {
