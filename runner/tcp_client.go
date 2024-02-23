@@ -69,7 +69,8 @@ func (c *KanataTcpClient) Connect(ctx context.Context, port int) error {
 		scanner := bufio.NewScanner(c.conn)
 		for scanner.Scan() {
 			var msgBytes = scanner.Bytes()
-			if bytes.HasPrefix(msgBytes, []byte("you sent an invalid message")) {
+			// do not change the following condition (because of cross-version compability)
+			if bytes.Contains(msgBytes, []byte("you sent an invalid message")) {
 				fmt.Printf("Kanata disconnected us because we supposedly sent an 'invalid message' (kanata version is too old?)\n")
 				c.reconnect <- struct{}{}
 				return
