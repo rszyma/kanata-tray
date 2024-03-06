@@ -1,0 +1,65 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+        "preset": {
+            "type": "object",
+            "properties": {
+                "kanata_executable": {
+                    "type": "string",
+                    "description": "A path to a kanata executable."
+                },
+                "kanata_config": {
+                    "type": "string",
+                    "description": "A path to a kanata configuration file. It will be passed as `--cfg=<value>` arg to kanata."
+                },
+                "autorun": {
+                    "type": "boolean",
+                    "description": "Whether the preset will be automatically ran at kanata-tray startup."
+                },
+                "tcp_port": {
+                    "type": "integer",
+                    "description": "A TCP port number. This should generally be between 1000 and 65535. It will be passed as `--port=<value>` arg to kanata."
+                },
+                "layer_icons": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string",
+                        "description": "A layer name to icon path mapping."
+                    },
+                    "description": "An array of layer name to icon path mappings."
+                }
+            },
+            "additionalProperties": false,
+            "description": "Preset defines the settings that kanata will be ran with when the preset gets selected in kanata-tray menu."
+        }
+    },
+    "type": "object",
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "general": {
+            "type": "object",
+            "properties": {
+                "allow_concurrent_presets": {
+                    "type": "boolean",
+                    "description": "Toggle for running presets concurrently or stopping before switching to a new one."
+                }
+            },
+            "additionalProperties": false,
+            "description": "Options that apply to kanata-tray behavior in general."
+        },
+        "defaults": {
+            "$ref": "#/definitions/preset",
+            "description": "You can override default preset fields here."
+        },
+        "presets": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/definitions/preset"
+            },
+            "description": "Defines presets that will be available in kanata-tray menu."
+        }
+    },
+    "additionalProperties": false
+}
