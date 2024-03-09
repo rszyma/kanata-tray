@@ -64,11 +64,15 @@ func mainImpl() error {
 	if err != nil {
 		return fmt.Errorf("loading config failed: %v", err)
 	}
-
-	menuTemplate := app.MenuTemplateFromConfig(*cfg)
+	menuTemplate, err := app.MenuTemplateFromConfig(*cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create menu from config: %v", err)
+	}
 	layerIcons := app.ResolveIcons(configFolder, cfg)
 
-	ctx := context.Background() // actually we don't really use ctx right now
+	// Actually we don't really use ctx right now to control kanata-tray termination
+	// so normal contex without cancel will do.
+	ctx := context.Background()
 	runner := runner.NewRunner(ctx, cfg.General.AllowConcurrentPresets)
 
 	onReady := func() {

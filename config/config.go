@@ -8,49 +8,94 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-type partialConfigJustDefaults struct {
-	PresetDefaults Preset `toml:"defaults"`
-}
-
 type Config struct {
-	partialConfigJustDefaults
-	General GeneralConfigOptions `toml:"general"`
-	Presets map[string]Preset    `toml:"presets"`
-}
-
-type GeneralConfigOptions struct {
-	AllowConcurrentPresets bool `toml:"allow_concurrent_presets"`
+	PresetDefaults Preset
+	General        GeneralConfigOptions
+	Presets        map[string]*Preset
 }
 
 type Preset struct {
-	Autorun          bool              `toml:"autorun"`
-	KanataExecutable string            `toml:"kanata_executable"`
-	KanataConfig     string            `toml:"kanata_config"`
-	TcpPort          int               `toml:"tcp_port"`
+	Autorun          bool
+	KanataExecutable string
+	KanataConfig     string
+	TcpPort          int
+	LayerIcons       map[string]string
+}
+
+type GeneralConfigOptions struct {
+	AllowConcurrentPresets bool
+}
+
+// =========
+// All golang toml parsers suck :/
+
+type config struct {
+	PresetDefaults *preset               `toml:"defaults"`
+	General        *generalConfigOptions `toml:"general"`
+	Presets        map[string]preset     `toml:"presets"`
+}
+
+type preset struct {
+	Autorun          *bool             `toml:"autorun"`
+	KanataExecutable *string           `toml:"kanata_executable"`
+	KanataConfig     *string           `toml:"kanata_config"`
+	TcpPort          *int              `toml:"tcp_port"`
 	LayerIcons       map[string]string `toml:"layer_icons"`
 }
 
-var defaults *partialConfigJustDefaults = nil
-
-func (c *Preset) UnmarshalTOML(text []byte) error {
-	if defaults != nil {
-		c = &defaults.PresetDefaults
+func (p *preset) applyDefaults(defaults *preset) {
+	if p.Autorun == nil {
+		p.Autorun = defaults.Autorun
 	}
-	return toml.Unmarshal(text, c)
+	if p.KanataExecutable == nil {
+		p.KanataExecutable = defaults.KanataExecutable
+	}
+	if p.KanataConfig == nil {
+		p.KanataConfig = defaults.KanataConfig
+	}
+	if p.TcpPort == nil {
+		p.TcpPort = defaults.TcpPort
+	}
+	// This is intended because we layer icons are handled specially.
+	//
+	// if p.LayerIcons == nil {
+	// 	p.LayerIcons = defaults.LayerIcons
+	// }
+}
+
+func (p *preset) intoExported() *Preset {
+	result := &Preset{}
+	if p.Autorun != nil {
+		result.Autorun = *p.Autorun
+	}
+	if p.KanataExecutable != nil {
+		result.KanataExecutable = *p.KanataExecutable
+	}
+	if p.KanataConfig != nil {
+		result.KanataConfig = *p.KanataConfig
+	}
+	if p.TcpPort != nil {
+		result.TcpPort = *p.TcpPort
+	}
+	if p.LayerIcons != nil {
+		result.LayerIcons = p.LayerIcons
+	}
+	return result
+}
+
+type generalConfigOptions struct {
+	AllowConcurrentPresets *bool `toml:"allow_concurrent_presets"`
 }
 
 func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
-	defaults = &partialConfigJustDefaults{}
-	err := toml.Unmarshal([]byte(defaultCfg), defaults)
+	var cfg *config = &config{}
+	err := toml.Unmarshal([]byte(defaultCfg), &cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse default config: %v", err)
 	}
-
-	var cfg *Config = &Config{}
-	err = toml.Unmarshal([]byte(defaultCfg), &cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse default config: %v", err)
-	}
+	// temporarily remove default presets
+	presetsFromDefaultConfig := cfg.Presets
+	cfg.Presets = nil
 
 	// Does the file not exist?
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
@@ -70,9 +115,28 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 		}
 	}
 
-	pp.Println("%v", defaults)
-	pp.Println("%v", cfg)
-	return cfg, nil
+	if cfg.Presets == nil {
+		cfg.Presets = presetsFromDefaultConfig
+	}
+
+	defaults := cfg.PresetDefaults
+
+	var cfg2 *Config = &Config{
+		PresetDefaults: *defaults.intoExported(),
+		General: GeneralConfigOptions{
+			AllowConcurrentPresets: *cfg.General.AllowConcurrentPresets,
+		},
+		Presets: map[string]*Preset{},
+	}
+
+	for k, v := range cfg.Presets {
+		v.applyDefaults(defaults)
+		exported := v.intoExported()
+		cfg2.Presets[k] = exported
+	}
+
+	pp.Printf("loaded config: %v\n", cfg2)
+	return cfg2, nil
 }
 
 var defaultCfg = `
@@ -80,6 +144,7 @@ var defaultCfg = `
 "$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/v0.1.0/doc/config_schema.json"
 
 general.allow_concurrent_presets = false
+defaults.tcp_port = 5829
 
 [defaults.layer_icons]
 
@@ -88,6 +153,5 @@ general.allow_concurrent_presets = false
 kanata_executable = ''
 kanata_config = ''
 autorun = false
-tcp_port = 5829
 
 `

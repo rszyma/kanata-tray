@@ -26,20 +26,20 @@ const (
 func (m *PresetMenuEntry) Title(status KanataStatus) string {
 	switch status {
 	case statusIdle:
-		return "Config: " + m.PresetName
+		return "Preset: " + m.PresetName
 	case statusRunning:
-		return "> Config: " + m.PresetName
+		return "> Preset: " + m.PresetName
 	case statusCrashed:
-		return "[ERR] Config: " + m.PresetName
+		return "[ERR] Preset: " + m.PresetName
 	}
-	return "Config: " + m.PresetName
+	return "Preset: " + m.PresetName
 }
 
 func (m *PresetMenuEntry) Tooltip() string {
-	return "Switch to kanata config: " + m.PresetName
+	return "Switch to preset: " + m.PresetName
 }
 
-func MenuTemplateFromConfig(cfg config.Config) []PresetMenuEntry {
+func MenuTemplateFromConfig(cfg config.Config) ([]PresetMenuEntry, error) {
 	presets := []PresetMenuEntry{}
 
 	for presetName, preset := range cfg.Presets {
@@ -58,16 +58,26 @@ func MenuTemplateFromConfig(cfg config.Config) []PresetMenuEntry {
 		// likely that users want to hide console, that's why they use kanata-tray
 		// in the first place.
 
+		var err error
+		preset.KanataConfig, err = expandHomeDir(preset.KanataConfig)
+		if err != nil {
+			return nil, err
+		}
+		preset.KanataExecutable, err = expandHomeDir(preset.KanataExecutable)
+		if err != nil {
+			return nil, err
+		}
+
 		entry := PresetMenuEntry{
 			IsSelectable: true,
-			Preset:       preset,
+			Preset:       *preset,
 			PresetName:   presetName,
 		}
 
 		presets = append(presets, entry)
 	}
 
-	return presets
+	return presets, nil
 }
 
 func resolveFilePath(path string) (string, error) {

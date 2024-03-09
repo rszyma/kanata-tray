@@ -13,16 +13,6 @@ type LayerIcons struct {
 	defaultIcons LayerIconsForPreset
 }
 
-func newLayerIcons() LayerIcons {
-	return LayerIcons{
-		presetIcons: make(map[string]*LayerIconsForPreset),
-		defaultIcons: LayerIconsForPreset{
-			layerIcons:   make(map[string][]byte),
-			wildcardIcon: []byte{},
-		},
-	}
-}
-
 type LayerIconsForPreset struct {
 	layerIcons   map[string][]byte
 	wildcardIcon []byte // can be nil
@@ -89,7 +79,7 @@ func ResolveIcons(configFolder string, cfg *config.Config) LayerIcons {
 	for layerName, unvalidatedIconPath := range cfg.PresetDefaults.LayerIcons {
 		data, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
 		if err != nil {
-			fmt.Printf("Custom icon file can't be accessed: %v\n", err)
+			fmt.Printf("defaults - custom icon file can't be read: %v\n", err)
 		} else if layerName == "*" {
 			icons.defaultIcons.wildcardIcon = data
 		} else {
@@ -100,7 +90,7 @@ func ResolveIcons(configFolder string, cfg *config.Config) LayerIcons {
 		for layerName, unvalidatedIconPath := range cfg.Presets[presetName].LayerIcons {
 			data, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
 			if err != nil {
-				fmt.Printf("Custom icon file can't be accessed: %v\n", err)
+				fmt.Printf("Preset '%s' - custom icon file can't be read: %v\n", presetName, err)
 			} else if layerName == "*" {
 				icons.presetIcons[presetName].wildcardIcon = data
 			} else {
@@ -120,7 +110,7 @@ func readIconInFolder(filePath string, folder string) ([]byte, error) {
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("'%s': %v\n", path, err)
+		return nil, err
 	}
 	return content, nil
 }
