@@ -44,7 +44,7 @@ func NewRunner(ctx context.Context, concurrent bool) *Runner {
 		kanataInstancePool:    []*kanata.Kanata{},
 		instanceWatcherCtxs:   []context.Context{},
 		concurrent:            concurrent,
-		runnersLimit:          0,
+		runnersLimit:          activeInstancesLimit,
 		ctx:                   ctx,
 	}
 }
@@ -93,7 +93,7 @@ func (r *Runner) Run(presetName string, kanataExecutable string, kanataConfig st
 		}
 	} else {
 		// create new instance
-		if r.runnersLimit >= len(r.activeKanataInstances) {
+		if r.runnersLimit < len(r.activeKanataInstances) {
 			return fmt.Errorf("active instances limit exceeded")
 		}
 		r.kanataInstancePool = append(r.kanataInstancePool, kanata.NewKanataInstance(r.ctx))

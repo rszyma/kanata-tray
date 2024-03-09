@@ -29,11 +29,16 @@ type SysTrayApp struct {
 }
 
 func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool, tcpPort int) *SysTrayApp {
+
 	t := &SysTrayApp{
 		presets:           menuTemplate,
 		layerIcons:        layerIcons,
 		concurrentPresets: allowConcurrentPresets,
 		tcpPort:           tcpPort,
+	}
+
+	for range menuTemplate {
+		t.statuses = append(t.statuses, statusIdle)
 	}
 
 	systray.SetIcon(icons.Default)
