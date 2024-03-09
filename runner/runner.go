@@ -136,7 +136,7 @@ func (r *Runner) SendClientMessage(presetName string, msg tcp_client.ClientMessa
 	defer r.instancesMappingLock.Unlock()
 	presetIndex, ok := r.activeKanataInstances[presetName]
 	if !ok {
-		return fmt.Errorf("preset with the given nam not found")
+		return fmt.Errorf("preset with the given name not found")
 	}
 	return r.kanataInstancePool[presetIndex].SendClientMessage(msg)
 }
@@ -147,4 +147,14 @@ func (r *Runner) RetCh() <-chan ItemAndPresetName[error] {
 
 func (r *Runner) ServerMessageCh() <-chan ItemAndPresetName[tcp_client.ServerMessage] {
 	return r.serverMessageCh
+}
+
+func (r *Runner) LogFile(presetName string) (string, error) {
+	r.instancesMappingLock.Lock()
+	defer r.instancesMappingLock.Unlock()
+	presetIndex, ok := r.activeKanataInstances[presetName]
+	if !ok {
+		return "", fmt.Errorf("preset with the given name not found")
+	}
+	return r.kanataInstancePool[presetIndex].LogFile()
 }

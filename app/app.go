@@ -19,11 +19,15 @@ type SysTrayApp struct {
 	layerIcons LayerIcons
 	tcpPort    int
 
-	presetClickedCh chan int // the value sent in channel is an index of preset
+	statusClickedCh   chan int // the value sent in channel is an index of preset
+	openLogsClickedCh chan int // the value sent in channel is an index of preset
 
 	// Menu items
 
-	mPresets []*systray.MenuItem
+	mPresets        []*systray.MenuItem
+	mPresetLogs     []*systray.MenuItem
+	mPresetStatuses []*systray.MenuItem
+
 	mOptions *systray.MenuItem
 	mQuit    *systray.MenuItem
 }
@@ -37,10 +41,6 @@ func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowC
 		tcpPort:           tcpPort,
 	}
 
-	for range menuTemplate {
-		t.statuses = append(t.statuses, statusIdle)
-	}
-
 	systray.SetIcon(icons.Default)
 	systray.SetTitle("kanata-tray")
 	systray.SetTooltip("kanata-tray")
@@ -51,6 +51,14 @@ func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowC
 			menuItem.Disable()
 		}
 		t.mPresets = append(t.mPresets, menuItem)
+
+		statusItem := menuItem.AddSubMenuItem(string(statusIdle), "kanata status for this preset")
+		t.mPresetStatuses = append(t.mPresetStatuses, statusItem)
+		t.statuses = append(t.statuses, statusIdle)
+
+		openLogsItem := menuItem.AddSubMenuItem("Open Logs", "Open Logs")
+		// openLogsItem.Disable()
+		t.mPresetLogs = append(t.mPresetLogs, openLogsItem)
 	}
 
 	systray.AddSeparator()
@@ -58,7 +66,8 @@ func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowC
 	t.mOptions = systray.AddMenuItem("Options", "Reveals kanata-tray config file")
 	t.mQuit = systray.AddMenuItem("Exit tray", "Closes kanata (if running) and exits the tray")
 
-	t.presetClickedCh = multipleMenuItemsClickListener(t.mPresets)
+	t.statusClickedCh = multipleMenuItemsClickListener(t.mPresetStatuses)
+	t.openLogsClickedCh = multipleMenuItemsClickListener(t.mPresetLogs)
 
 	return t
 }
@@ -69,21 +78,16 @@ func (t *SysTrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	} else {
 		fmt.Printf("Running preset '%s'\n", t.presets[presetIndex].PresetName)
 	}
-	t.statuses[presetIndex] = statusStarting
-	t.mPresets[presetIndex].SetTitle(t.presets[presetIndex].Title(statusStarting))
-	systray.SetIcon(icons.Default)
-
+	t.setStatus(presetIndex, statusStarting)
 	kanataExecutable := t.presets[presetIndex].Preset.KanataExecutable
 	kanataConfig := t.presets[presetIndex].Preset.KanataConfig
 	err := runner.Run(t.presets[presetIndex].PresetName, kanataExecutable, kanataConfig, t.tcpPort)
 	if err != nil {
 		fmt.Printf("runner.Run failed with: %v\n", err)
-		t.statuses[presetIndex] = statusCrashed
-		t.mPresets[presetIndex].SetTitle(t.presets[presetIndex].Title(statusCrashed))
+		t.setStatus(presetIndex, statusCrashed)
 		return
 	}
-	t.statuses[presetIndex] = statusRunning
-	t.mPresets[presetIndex].SetTitle(t.presets[presetIndex].Title(statusStarting))
+	t.setStatus(presetIndex, statusRunning)
 }
 
 func (app *SysTrayApp) StartProcessingLoop(runner *runner_pkg.Runner, allowConcurrentPresets bool, configFolder string) {
@@ -153,36 +157,34 @@ func (app *SysTrayApp) StartProcessingLoop(runner *runner_pkg.Runner, allowConcu
 
 			// TODO: is this even needed anymore? We don't even validate if that's process slot for the preset in `ret.PresetName`.
 			<-runner.ProcessSlotCh // free 1 slot
-		// case <-app.mStatus.ClickedCh:
-		// 	switch app.runnerStatus {
-		// 	case statusIdle:
-		// 		// run kanata
-		// 		app.runPreset(runner)
-		// 	case statusRunning:
-		// 		// stop kanata
-		// 		err := runner.StopNonblocking()
-		// 		if err != nil {
-		// 			fmt.Printf("Failed to stop kanata process: %v", err)
-		// 		} else {
-		// 			app.runnerStatus = statusIdle
-		// 			app.mStatus.SetTitle(statusIdle)
-		// 			systray.SetIcon(icons.Pause)
-		// 		}
-		// 	case statusCrashed:
-		// 		// restart kanata
-		// 		fmt.Println("Restarting kanata")
-		// 		app.runPreset(runner)
-		// 	}
-		// case <-app.mOpenKanataLogFile.ClickedCh:
-		// 	logFile, err := runner.LogFile()
-		// 	if err != nil {
-		// 		fmt.Printf("Can't open log file: %v\n", err)
-		// 	} else {
-		// 		fmt.Printf("Opening log file '%s'\n", logFile)
-		// 		open.Start(logFile)
-		// 	}
-		case i := <-app.presetClickedCh:
-			app.runPreset(i, runner)
+		case i := <-app.statusClickedCh:
+			presetName := app.presets[i].PresetName
+			switch app.statuses[i] {
+			case statusIdle:
+				// run kanata
+				app.runPreset(i, runner)
+			case statusRunning:
+				// stop kanata
+				err := runner.StopNonblocking(presetName)
+				if err != nil {
+					fmt.Printf("Failed to stop kanata process: %v", err)
+				} else {
+					app.setStatus(i, statusIdle)
+				}
+			case statusCrashed:
+				// restart kanata
+				fmt.Println("Restarting kanata")
+				app.runPreset(i, runner)
+			}
+		case i := <-app.openLogsClickedCh:
+			presetName := app.presets[i].PresetName
+			logFile, err := runner.LogFile(presetName)
+			if err != nil {
+				fmt.Printf("Can't open log file for preset '%s': %v\n", presetName, err)
+			} else {
+				fmt.Printf("Opening log file for preset '%s': '%s'\n", presetName, logFile)
+				open.Start(logFile)
+			}
 		case <-app.mOptions.ClickedCh:
 			open.Start(configFolder)
 		case <-app.mQuit.ClickedCh:
@@ -224,6 +226,11 @@ func (t *SysTrayApp) isAnyPresetRunning() bool {
 		}
 	}
 	return false
+}
+
+func (t *SysTrayApp) setStatus(presetIndex int, status KanataStatus) {
+	t.statuses[presetIndex] = status
+	t.mPresetStatuses[presetIndex].SetTitle(string(status))
 }
 
 // Returns a channel that sends an index of item that was clicked.

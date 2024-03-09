@@ -76,7 +76,7 @@ func (r *Kanata) RunNonblocking(kanataExecutable string, kanataConfig string, tc
 
 	cfgArg := ""
 	if kanataConfig != "" {
-		cfgArg = "-c " + kanataConfig
+		cfgArg = "-c=" + kanataConfig
 	}
 
 	cmd := exec.CommandContext(r.ctx, kanataExecutable, cfgArg, "--port", fmt.Sprint(tcpPort))
