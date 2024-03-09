@@ -1,4 +1,4 @@
-package runner
+package tcp_client
 
 import (
 	"bufio"
@@ -12,11 +12,10 @@ import (
 )
 
 type KanataTcpClient struct {
-	ServerMessageCh chan ServerMessage // shouldn't be written to from outside
+	ClientMessageCh chan ClientMessage
+	Reconnect       chan struct{}
 
-	clientMessageCh chan ClientMessage
-
-	reconnect chan struct{}
+	serverMessageCh chan ServerMessage // shouldn't be written to from outside
 
 	mu     sync.Mutex // allow only 1 conn at a time
 	conn   net.Conn
@@ -25,9 +24,9 @@ type KanataTcpClient struct {
 
 func NewTcpClient() *KanataTcpClient {
 	c := &KanataTcpClient{
-		ServerMessageCh: make(chan ServerMessage),
-		clientMessageCh: make(chan ClientMessage),
-		reconnect:       make(chan struct{}, 1),
+		ClientMessageCh: make(chan ClientMessage),
+		Reconnect:       make(chan struct{}, 1),
+		serverMessageCh: make(chan ServerMessage),
 		mu:              sync.Mutex{},
 		dialer: net.Dialer{
 			Timeout: time.Second * 3,
@@ -51,7 +50,7 @@ func (c *KanataTcpClient) Connect(ctx context.Context, port int) error {
 			select {
 			case <-ctxSend.Done():
 				return
-			case msg := <-c.clientMessageCh:
+			case msg := <-c.ClientMessageCh:
 				msgBytes := msg.Bytes()
 				_, err := c.conn.Write(msgBytes)
 				if err != nil {
@@ -72,7 +71,7 @@ func (c *KanataTcpClient) Connect(ctx context.Context, port int) error {
 			// do not change the following condition (because of cross-version compability)
 			if bytes.Contains(msgBytes, []byte("you sent an invalid message")) {
 				fmt.Printf("Kanata disconnected us because we supposedly sent an 'invalid message' (kanata version is too old?)\n")
-				c.reconnect <- struct{}{}
+				c.Reconnect <- struct{}{}
 				return
 			}
 			var msg ServerMessage
@@ -81,13 +80,17 @@ func (c *KanataTcpClient) Connect(ctx context.Context, port int) error {
 				fmt.Printf("tcp client: failed to unmarshal message '%s': %v\n", string(msgBytes), err)
 				continue
 			}
-			c.ServerMessageCh <- msg
+			c.serverMessageCh <- msg
 		}
 		if err := scanner.Err(); err != nil {
 			fmt.Printf("tcp client: failed to read stream: %v\n", err)
 		}
 	}()
 	return nil
+}
+
+func (c *KanataTcpClient) ServerMessageCh() <-chan ServerMessage {
+	return c.serverMessageCh
 }
 
 type ClientMessage struct {

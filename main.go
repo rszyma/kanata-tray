@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/rszyma/kanata-tray/app"
 	"github.com/rszyma/kanata-tray/config"
-	"github.com/rszyma/kanata-tray/icons"
 	"github.com/rszyma/kanata-tray/runner"
 )
 
@@ -66,12 +66,14 @@ func mainImpl() error {
 	}
 
 	menuTemplate := app.MenuTemplateFromConfig(*cfg)
-	layerIcons := app.ResolveIcons(configFolder, cfg.LayerIcons, icons.Default)
-	runner := runner.NewKanataRunner()
+	layerIcons := app.ResolveIcons(configFolder, cfg)
+
+	ctx := context.Background() // actually we don't really use ctx right now
+	runner := runner.NewRunner(ctx, cfg.General.AllowConcurrentPresets)
 
 	onReady := func() {
-		app := app.NewSystrayApp(&menuTemplate, layerIcons, cfg.General.TcpPort)
-		go app.StartProcessingLoop(&runner, cfg.General.LaunchOnStart, configFolder)
+		app := app.NewSystrayApp(menuTemplate, layerIcons, cfg.General.AllowConcurrentPresets, 12313)
+		go app.StartProcessingLoop(runner, cfg.General.AllowConcurrentPresets, configFolder)
 	}
 
 	onExit := func() {

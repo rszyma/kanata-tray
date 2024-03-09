@@ -17,6 +17,16 @@ You can access it from from: `Click Tray Icon > Options`.
 On Linux, the config folder location is `~/.config/kanata-tray`. 
 On Windows, it's `C:\Users\<YourUsername>\AppData\Roaming\kanata-tray`
 
+### Config completion in editors
+
+In VSCode to get editor support for your kanata-tray config, install [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml#completion-and-validation-with-json-schema) extension and the following line at the top of your `config.toml` file. 
+```toml
+"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/v0.2.0/doc/config_schema.json"
+```
+Make sure to replace version number in the schema link with whatever kanata-tray version you use.
+
+### Examples 
+
 An example of customized configuration file:
 
 ```toml

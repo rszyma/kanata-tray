@@ -8,23 +8,46 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+type partialConfigJustDefaults struct {
+	PresetDefaults Preset `toml:"defaults"`
+}
+
 type Config struct {
-	Configurations []string             `toml:"configurations"`
-	Executables    []string             `toml:"executables"`
-	LayerIcons     map[string]string    `toml:"layer_icons"`
-	General        GeneralConfigOptions `toml:"general"`
+	partialConfigJustDefaults
+	General GeneralConfigOptions `toml:"general"`
+	Presets map[string]Preset    `toml:"presets"`
 }
 
 type GeneralConfigOptions struct {
-	IncludeExecutablesFromSystemPath   bool `toml:"include_executables_from_system_path"`
-	IncludeConfigsFromDefaultLocations bool `toml:"include_configs_from_default_locations"`
-	LaunchOnStart                      bool `toml:"launch_on_start"`
-	TcpPort                            int  `toml:"tcp_port"`
+	AllowConcurrentPresets bool `toml:"allow_concurrent_presets"`
+}
+
+type Preset struct {
+	Autorun          bool              `toml:"autorun"`
+	KanataExecutable string            `toml:"kanata_executable"`
+	KanataConfig     string            `toml:"kanata_config"`
+	TcpPort          int               `toml:"tcp_port"`
+	LayerIcons       map[string]string `toml:"layer_icons"`
+}
+
+var defaults *partialConfigJustDefaults = nil
+
+func (c *Preset) UnmarshalTOML(text []byte) error {
+	if defaults != nil {
+		c = &defaults.PresetDefaults
+	}
+	return toml.Unmarshal(text, c)
 }
 
 func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
+	defaults = &partialConfigJustDefaults{}
+	err := toml.Unmarshal([]byte(defaultCfg), defaults)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse default config: %v", err)
+	}
+
 	var cfg *Config = &Config{}
-	err := toml.Unmarshal([]byte(defaultCfg), &cfg)
+	err = toml.Unmarshal([]byte(defaultCfg), &cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse default config: %v", err)
 	}
@@ -47,27 +70,24 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 		}
 	}
 
+	pp.Println("%v", defaults)
 	pp.Println("%v", cfg)
 	return cfg, nil
 }
 
 var defaultCfg = `
 # See https://github.com/rszyma/kanata-tray for help with configuration.
+"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/v0.1.0/doc/config_schema.json"
 
-configurations = [
-    
-]
+general.allow_concurrent_presets = false
 
-executables = [
-    
-]
-
-[layer_icons]
+[defaults.layer_icons]
 
 
-[general]
-include_executables_from_system_path = true
-include_configs_from_default_locations = true
-launch_on_start = true
+[presets.'Default Preset']
+kanata_executable = ''
+kanata_config = ''
+autorun = false
 tcp_port = 5829
+
 `
