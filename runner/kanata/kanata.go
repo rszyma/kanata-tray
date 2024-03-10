@@ -16,56 +16,27 @@ import (
 // Reusing with different kanata configs/presets is allowed.
 type Kanata struct {
 	// Prevents race condition when restarting kanata.
-	// This must be written to from from outside to free the internal slot.
+	// This must be written to from from outside to free an internal slot.
 	ProcessSlotCh chan struct{}
 
-	retCh             chan error // Returns the error returned by `cmd.Wait()`
-	ctx               context.Context
-	cmd               *exec.Cmd
-	logFile           *os.File
-	manualTermination bool
-	tcpClient         *tcp_client.KanataTcpClient
+	retCh     chan error // Returns the error returned by `cmd.Wait()`
+	cmd       *exec.Cmd
+	logFile   *os.File
+	tcpClient *tcp_client.KanataTcpClient
 }
 
-func NewKanataInstance(ctx context.Context) *Kanata {
+func NewKanataInstance() *Kanata {
 	return &Kanata{
 		ProcessSlotCh: make(chan struct{}, 1),
 
-		retCh:             make(chan error),
-		ctx:               ctx,
-		cmd:               nil,
-		logFile:           nil,
-		manualTermination: false,
-		tcpClient:         tcp_client.NewTcpClient(),
+		retCh:     make(chan error),
+		cmd:       nil,
+		logFile:   nil,
+		tcpClient: tcp_client.NewTcpClient(),
 	}
 }
 
-// Terminates the running kanata process, if there is one. It doesn't wait for
-// the process to actually stop. If you want to be sure that the process has been
-// stopped, try writing to `ProcessSlotCh`. Make sure to pop back the item
-// from `ProcessSlotCh` if you want to be able to reuse this struct after that.
-func (r *Kanata) StopNonblocking() error {
-	if r.cmd != nil {
-		if r.cmd.ProcessState != nil {
-			// process was already killed from outside?
-		} else {
-			r.manualTermination = true
-			fmt.Println("Killing the currently running kanata process...")
-			err := r.cmd.Process.Kill()
-			if err != nil {
-				return fmt.Errorf("cmd.Process.Kill failed: %v", err)
-			}
-		}
-	}
-	return nil
-}
-
-func (r *Kanata) RunNonblocking(kanataExecutable string, kanataConfig string, tcpPort int) error {
-	err := r.StopNonblocking()
-	if err != nil {
-		return fmt.Errorf("failed to stop the previous process: %v", err)
-	}
-
+func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string, tcpPort int) error {
 	if kanataExecutable == "" {
 		var err error
 		kanataExecutable, err = exec.LookPath("kanata")
@@ -79,7 +50,7 @@ func (r *Kanata) RunNonblocking(kanataExecutable string, kanataConfig string, tc
 		cfgArg = "-c=" + kanataConfig
 	}
 
-	cmd := exec.CommandContext(r.ctx, kanataExecutable, cfgArg, "--port", fmt.Sprint(tcpPort))
+	cmd := exec.CommandContext(ctx, kanataExecutable, cfgArg, "--port", fmt.Sprint(tcpPort))
 	cmd.SysProcAttr = os_specific.ProcessAttr
 
 	go func() {
@@ -90,9 +61,10 @@ func (r *Kanata) RunNonblocking(kanataExecutable string, kanataConfig string, tc
 		if r.logFile != nil {
 			r.logFile.Close()
 		}
+		var err error
 		r.logFile, err = os.CreateTemp("", "kanata_lastrun_*.log")
 		if err != nil {
-			r.retCh <- fmt.Errorf("failed to create temp file: %v", err)
+			r.retCh <- fmt.Errorf("failed to create temp log file: %v", err)
 			return
 		}
 
@@ -110,7 +82,7 @@ func (r *Kanata) RunNonblocking(kanataExecutable string, kanataConfig string, tc
 
 		fmt.Printf("Started kanata (pid=%d)\n", r.cmd.Process.Pid)
 
-		tcpConnectionCtx, cancelTcpConnection := context.WithCancel(r.ctx)
+		tcpConnectionCtx, cancelTcpConnection := context.WithCancel(ctx)
 		// Need to wait until kanata boot up and setups the TCP server.
 		// 2000 ms is a default boot delay in kanata.
 		time.Sleep(time.Millisecond * 2100)
@@ -140,13 +112,16 @@ func (r *Kanata) RunNonblocking(kanataExecutable string, kanataConfig string, tc
 			fmt.Printf("Failed to send ClientMessage: %v\n", err)
 		}
 
-		err = r.cmd.Wait()
+		err = r.cmd.Wait() // block until kanata exits
+
 		r.cmd = nil
 		cancelTcpConnection()
-		if r.manualTermination {
-			r.manualTermination = false
+		if ctx.Err() != nil {
+			// A non-nil ctx err means that the kill was issued from outside,
+			// not the process itself (e.g. crash).
 			r.retCh <- nil
 		} else {
+			// kanata crashed or terminated itself
 			r.retCh <- err
 		}
 	}()
@@ -159,6 +134,10 @@ func (r *Kanata) LogFile() (string, error) {
 		return "", fmt.Errorf("log file doesn't exist")
 	}
 	return r.logFile.Name(), nil
+}
+
+func (r *Kanata) RetCh() <-chan error {
+	return r.retCh
 }
 
 func (r *Kanata) ServerMessageCh() <-chan tcp_client.ServerMessage {

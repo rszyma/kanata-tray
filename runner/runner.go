@@ -17,10 +17,9 @@ type ItemAndPresetName[T any] struct {
 }
 
 type Runner struct {
-	retCh           chan ItemAndPresetName[error]
-	ProcessSlotCh   chan ItemAndPresetName[struct{}]
-	serverMessageCh chan ItemAndPresetName[tcp_client.ServerMessage]
-	clientMessageCh chan ItemAndPresetName[tcp_client.ClientMessage]
+	retCh                 chan ItemAndPresetName[error]
+	serverMessageCh       chan ItemAndPresetName[tcp_client.ServerMessage]
+	clientMessageChannels map[string]chan tcp_client.ClientMessage
 	// Maps preset names to runner indices in `runnerPool` and contexts in `instanceWatcherCtxs`.
 	activeKanataInstances map[string]int
 	kanataInstancePool    []*kanata.Kanata
@@ -28,44 +27,29 @@ type Runner struct {
 	// Need to have mutex to ensure values in `kanataInstancePool` are not being overwritten
 	// while a value from `activeKanataInstances` is still "borrowed".
 	instancesMappingLock sync.Mutex
-	concurrent           bool
 	runnersLimit         int
-	ctx                  context.Context
 }
 
 func NewRunner(ctx context.Context, concurrent bool) *Runner {
 	activeInstancesLimit := 10
 	return &Runner{
-		retCh:                 make(chan ItemAndPresetName[error], activeInstancesLimit),
-		ProcessSlotCh:         make(chan ItemAndPresetName[struct{}], activeInstancesLimit),
-		serverMessageCh:       make(chan ItemAndPresetName[tcp_client.ServerMessage], activeInstancesLimit),
-		clientMessageCh:       make(chan ItemAndPresetName[tcp_client.ClientMessage], activeInstancesLimit),
+		retCh:                 make(chan ItemAndPresetName[error]),
+		serverMessageCh:       make(chan ItemAndPresetName[tcp_client.ServerMessage]),
+		clientMessageChannels: make(map[string]chan tcp_client.ClientMessage),
 		activeKanataInstances: make(map[string]int),
 		kanataInstancePool:    []*kanata.Kanata{},
 		instanceWatcherCtxs:   []context.Context{},
-		concurrent:            concurrent,
 		runnersLimit:          activeInstancesLimit,
-		ctx:                   ctx,
 	}
 }
 
-// Run a new kanata instance from a preset.
-// Blocks until the process is started.
-//
-// Depending on the value of `concurrent`, it will either add a new runner to pool
-// (or reuse unused runner) or first stop the running instances, and then run
-// the a one it's place. Will fail if active instances limit were to be exceeded.
-func (r *Runner) Run(presetName string, kanataExecutable string, kanataConfig string, tcpPort int) error {
+// Run a new kanata instance from a preset. Blocks until the process is started.
+// Calling Run when there's a previous preset running with the the same
+// presetName will block until the previous process finishes.
+// To stop running preset, caller needs to cancel ctx.
+func (r *Runner) Run(ctx context.Context, presetName string, kanataExecutable string, kanataConfig string, tcpPort int) error {
 	r.instancesMappingLock.Lock()
 	defer r.instancesMappingLock.Unlock()
-
-	if r.concurrent {
-		// Stop all
-		for k, i := range r.activeKanataInstances {
-			_ = r.kanataInstancePool[i].StopNonblocking()
-			delete(r.activeKanataInstances, k)
-		}
-	}
 
 	var instanceIndex int
 
@@ -75,7 +59,6 @@ func (r *Runner) Run(presetName string, kanataExecutable string, kanataConfig st
 
 	if i, ok := r.activeKanataInstances[presetName]; ok {
 		// reuse (restart) at index
-		_ = r.kanataInstancePool[i].StopNonblocking()
 		instanceIndex = i
 	} else if len(r.activeKanataInstances) < len(r.kanataInstancePool) {
 		// reuse first free instance
@@ -85,7 +68,11 @@ func (r *Runner) Run(presetName string, kanataExecutable string, kanataConfig st
 		}
 		sort.Ints(activeInstanceIndices)
 		for i := 0; i < len(r.kanataInstancePool); i++ {
-			if activeInstanceIndices[i] != i {
+			if i >= len(activeInstanceIndices) {
+				instanceIndex = i
+				break
+			}
+			if activeInstanceIndices[i] > i {
 				// kanataInstancePool at index `i` is unused
 				instanceIndex = i
 				break
@@ -93,34 +80,52 @@ func (r *Runner) Run(presetName string, kanataExecutable string, kanataConfig st
 		}
 	} else {
 		// create new instance
-		if r.runnersLimit < len(r.activeKanataInstances) {
+		if len(r.activeKanataInstances) >= r.runnersLimit {
 			return fmt.Errorf("active instances limit exceeded")
 		}
-		r.kanataInstancePool = append(r.kanataInstancePool, kanata.NewKanataInstance(r.ctx))
+		r.kanataInstancePool = append(r.kanataInstancePool, kanata.NewKanataInstance())
 		instanceIndex = len(r.kanataInstancePool) - 1
 	}
 
 	instance := r.kanataInstancePool[instanceIndex]
-	err := instance.RunNonblocking(kanataExecutable, kanataConfig, tcpPort)
+	err := instance.RunNonblocking(ctx, kanataExecutable, kanataConfig, tcpPort)
 	if err != nil {
 		return fmt.Errorf("failed to run kanata: %v", err)
 	}
 	r.activeKanataInstances[presetName] = instanceIndex
-	return nil
-}
+	r.clientMessageChannels[presetName] = make(chan tcp_client.ClientMessage)
 
-func (r *Runner) StopNonblocking(presetName string) error {
-	r.instancesMappingLock.Lock()
-	defer r.instancesMappingLock.Unlock()
-	i, ok := r.activeKanataInstances[presetName]
-	if !ok {
-		return fmt.Errorf("preset with the provided name is not running")
-	}
-	err := r.kanataInstancePool[i].StopNonblocking()
-	if err != nil {
-		return err
-	}
-	delete(r.activeKanataInstances, presetName) // should this be before or after checking for error?
+	go func() {
+		<-ctx.Done()
+		r.instancesMappingLock.Lock()
+		defer r.instancesMappingLock.Unlock()
+		delete(r.activeKanataInstances, presetName)
+		delete(r.clientMessageChannels, presetName)
+	}()
+
+	go func() {
+		retCh := instance.RetCh()
+		serverMessageCh := instance.ServerMessageCh()
+		clientMesasgeCh := r.clientMessageChannels[presetName]
+		for {
+			select {
+			case ret := <-retCh:
+				r.retCh <- ItemAndPresetName[error]{
+					Item:       ret,
+					PresetName: presetName,
+				}
+				return
+			case msg := <-serverMessageCh:
+				r.serverMessageCh <- ItemAndPresetName[tcp_client.ServerMessage]{
+					Item:       msg,
+					PresetName: presetName,
+				}
+			case msg := <-clientMesasgeCh:
+				instance.SendClientMessage(msg)
+			}
+		}
+	}()
+
 	return nil
 }
 

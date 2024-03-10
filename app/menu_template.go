@@ -80,17 +80,6 @@ func MenuTemplateFromConfig(cfg config.Config) ([]PresetMenuEntry, error) {
 	return presets, nil
 }
 
-func resolveFilePath(path string) (string, error) {
-	path, err := expandHomeDir(path)
-	if err != nil {
-		return "", fmt.Errorf("expandHomeDir: %v", err)
-	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return "", fmt.Errorf("file doesn't exist")
-	}
-	return path, nil
-}
-
 func expandHomeDir(path string) (string, error) {
 	if strings.Contains(path, "~") {
 		dirname, err := os.UserHomeDir()
@@ -102,3 +91,14 @@ func expandHomeDir(path string) (string, error) {
 	}
 	return path, nil
 }
+
+// func resolveFilePath(path string) (string, error) {
+// 	path, err := expandHomeDir(path)
+// 	if err != nil {
+// 		return "", fmt.Errorf("expandHomeDir: %v", err)
+// 	}
+// 	if _, err := os.Stat(path); os.IsNotExist(err) {
+// 		return "", fmt.Errorf("file doesn't exist")
+// 	}
+// 	return path, nil
+// }

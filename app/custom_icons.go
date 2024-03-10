@@ -38,7 +38,7 @@ func (c LayerIcons) IconForLayerName(presetName string, layerName string) []byte
 		return layerIcon
 	}
 	// preset_wildcard
-	if preset.wildcardIcon != nil {
+	if preset != nil && preset.wildcardIcon != nil {
 		fmt.Printf("Setting icon: preset:%s, layer:*\n", presetName)
 		return preset.wildcardIcon
 	}
