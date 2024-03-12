@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/elliotchance/orderedmap/v2"
 	"github.com/k0kubun/pp/v3"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -11,7 +12,7 @@ import (
 type Config struct {
 	PresetDefaults Preset
 	General        GeneralConfigOptions
-	Presets        map[string]*Preset
+	Presets        orderedmap.OrderedMap[string, *Preset]
 }
 
 type Preset struct {
@@ -108,8 +109,7 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 			return nil, fmt.Errorf("failed to open file '%s': %v", configFilePath, err)
 		}
 		defer fh.Close()
-		decoder := toml.NewDecoder(fh)
-		err = decoder.Decode(&cfg)
+		err = toml.NewDecoder(fh).Decode(&cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse config file '%s': %v", configFilePath, err)
 		}
@@ -126,9 +126,10 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 		General: GeneralConfigOptions{
 			AllowConcurrentPresets: *cfg.General.AllowConcurrentPresets,
 		},
-		Presets: map[string]*Preset{},
+		Presets: util.NewOrdereredMap[string, *Preset](),
 	}
 
+	// TODO: keep order of items
 	for k, v := range cfg.Presets {
 		v.applyDefaults(defaults)
 		exported := v.intoExported()

@@ -86,6 +86,7 @@ func ResolveIcons(configFolder string, cfg *config.Config) LayerIcons {
 			icons.defaultIcons.layerIcons[layerName] = data
 		}
 	}
+
 	for presetName := range cfg.Presets {
 		for layerName, unvalidatedIconPath := range cfg.Presets[presetName].LayerIcons {
 			data, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)

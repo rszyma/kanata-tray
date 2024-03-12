@@ -26,11 +26,47 @@
                         "type": "string",
                         "description": "A layer name to icon path mapping."
                     },
-                    "description": "An array of layer name to icon path mappings."
+                    "description": "A map of layer name to icon path mappings."
+                }
+            },
+            "additionalProperties": false
+        },
+        "preset_with_name": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the preset."
+                },
+                "kanata_executable": {
+                    "type": "string",
+                    "description": "A path to a kanata executable."
+                },
+                "kanata_config": {
+                    "type": "string",
+                    "description": "A path to a kanata configuration file. It will be passed as `--cfg=<value>` arg to kanata."
+                },
+                "autorun": {
+                    "type": "boolean",
+                    "description": "Whether the preset will be automatically ran at kanata-tray startup."
+                },
+                "tcp_port": {
+                    "type": "integer",
+                    "description": "A TCP port number. This should generally be between 1000 and 65535. It will be passed as `--port=<value>` arg to kanata."
+                },
+                "layer_icons": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string",
+                        "description": "A layer name to icon path mapping."
+                    },
+                    "description": "A map of layer name to icon path mappings."
                 }
             },
             "additionalProperties": false,
-            "description": "Preset defines the settings that kanata will be ran with when the preset gets selected in kanata-tray menu."
+            "required": [
+                "name"
+            ]
         }
     },
     "type": "object",
@@ -50,16 +86,19 @@
             "description": "Options that apply to kanata-tray behavior in general."
         },
         "defaults": {
-            "$ref": "#/definitions/preset",
-            "description": "You can override default preset fields here."
+            "$ref": "#/definitions/preset"
         },
         "presets": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/definitions/preset"
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/preset_with_name"
             },
-            "description": "Defines presets that will be available in kanata-tray menu."
+            "additionalProperties": false,
+            "description": "An array of presets that will be available in kanata-tray menu. Each item must have a 'name' field."
         }
     },
-    "additionalProperties": false
+    "additionalProperties": false,
+    "required": [
+        "defaults"
+    ]
 }
