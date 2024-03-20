@@ -97,12 +97,12 @@ func (t *SysTrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	t.presetCancelFuncs[presetIndex] = cancel
 }
 
-func (app *SysTrayApp) StartProcessingLoop(runner *runner_pkg.Runner, allowConcurrentPresets bool, configFolder string) {
+func (app *SysTrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder string) {
 	systray.SetIcon(icons.Pause)
 	for i, preset := range app.presets {
 		if preset.Preset.Autorun {
 			app.runPreset(i, runner)
-			if allowConcurrentPresets {
+			if app.concurrentPresets {
 				// Execute only the first preset if multi-exec is disabled.
 				break
 			}
