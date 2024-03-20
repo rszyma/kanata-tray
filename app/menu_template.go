@@ -42,7 +42,10 @@ func (m *PresetMenuEntry) Tooltip() string {
 func MenuTemplateFromConfig(cfg config.Config) ([]PresetMenuEntry, error) {
 	presets := []PresetMenuEntry{}
 
-	for presetName, preset := range cfg.Presets {
+	for m := cfg.Presets.Front(); m != nil; m = m.Next() {
+		presetName := m.Key
+		preset := m.Value
+
 		// TODO: resolve path here? and put it in value?
 		//
 		// Resolve later could be better, since cfg can be also an empty value.

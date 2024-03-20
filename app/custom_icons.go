@@ -87,8 +87,10 @@ func ResolveIcons(configFolder string, cfg *config.Config) LayerIcons {
 		}
 	}
 
-	for presetName := range cfg.Presets {
-		for layerName, unvalidatedIconPath := range cfg.Presets[presetName].LayerIcons {
+	for m := cfg.Presets.Front(); m != nil; m = m.Next() {
+		presetName := m.Key
+		preset := m.Value
+		for layerName, unvalidatedIconPath := range preset.LayerIcons {
 			data, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
 			if err != nil {
 				fmt.Printf("Preset '%s' - custom icon file can't be read: %v\n", presetName, err)

@@ -1,18 +1,22 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/elliotchance/orderedmap/v2"
 	"github.com/k0kubun/pp/v3"
+	"github.com/kr/pretty"
 	"github.com/pelletier/go-toml/v2"
+	tomlu "github.com/pelletier/go-toml/v2/unstable"
 )
 
 type Config struct {
 	PresetDefaults Preset
 	General        GeneralConfigOptions
-	Presets        orderedmap.OrderedMap[string, *Preset]
+	Presets        *OrderedMap[string, *Preset]
 }
 
 type Preset struct {
@@ -21,6 +25,11 @@ type Preset struct {
 	KanataConfig     string
 	TcpPort          int
 	LayerIcons       map[string]string
+}
+
+func (m *Preset) GoString() string {
+	pp.Default.SetColoringEnabled(false)
+	return pp.Sprintf("%s", m)
 }
 
 type GeneralConfigOptions struct {
@@ -90,9 +99,15 @@ type generalConfigOptions struct {
 
 func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 	var cfg *config = &config{}
-	err := toml.Unmarshal([]byte(defaultCfg), &cfg)
+	// Golang map don't keep track of insertion order, so we need to get the
+	// order of declarations in toml separately.
+	layersNames, err := layersOrder([]byte(defaultCfg))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse default config: %v", err)
+		panic(fmt.Errorf("default config failed layersOrder: %v", err))
+	}
+	err = toml.Unmarshal([]byte(defaultCfg), &cfg)
+	if err != nil {
+		panic(fmt.Errorf("failed to parse default config: %v", err))
 	}
 	// temporarily remove default presets
 	presetsFromDefaultConfig := cfg.Presets
@@ -104,14 +119,20 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 		os.WriteFile(configFilePath, []byte(defaultCfg), os.FileMode(0600))
 	} else {
 		// Load the existing file.
-		fh, err := os.Open(configFilePath)
+		content, err := os.ReadFile(configFilePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to open file '%s': %v", configFilePath, err)
+			return nil, fmt.Errorf("failed to read file '%s': %v", configFilePath, err)
 		}
-		defer fh.Close()
-		err = toml.NewDecoder(fh).Decode(&cfg)
+		err = toml.NewDecoder(bytes.NewReader(content)).Decode(&cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse config file '%s': %v", configFilePath, err)
+		}
+		lnames, err := layersOrder(content)
+		if err != nil {
+			panic("default config failed layersOrder")
+		}
+		if len(lnames) != 0 {
+			layersNames = lnames
 		}
 	}
 
@@ -126,18 +147,118 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 		General: GeneralConfigOptions{
 			AllowConcurrentPresets: *cfg.General.AllowConcurrentPresets,
 		},
-		Presets: util.NewOrdereredMap[string, *Preset](),
+		Presets: NewOrderedMap[string, *Preset](),
 	}
 
-	// TODO: keep order of items
-	for k, v := range cfg.Presets {
+	for _, layerName := range layersNames {
+		v, ok := cfg.Presets[layerName]
+		if !ok {
+			panic("layer names should match")
+		}
 		v.applyDefaults(defaults)
 		exported := v.intoExported()
-		cfg2.Presets[k] = exported
+		cfg2.Presets.Set(layerName, exported)
 	}
 
-	pp.Printf("loaded config: %v\n", cfg2)
+	pretty.Println("loaded config:", cfg2)
 	return cfg2, nil
+}
+
+// Returns an array of layer names from config in order of declaration.
+func layersOrder(cfgContent []byte) ([]string, error) {
+	layerNamesInOrder := []string{}
+
+	p := tomlu.Parser{}
+	p.Reset([]byte(cfgContent))
+
+	// iterate over all top level expressions
+	for p.NextExpression() {
+		e := p.Expression()
+
+		if e.Kind != tomlu.Table {
+			continue
+		}
+
+		// Let's look at the key. It's an iterator over the multiple dotted parts of the key.
+		it := e.Key()
+		parts := keyAsStrings(it)
+
+		// we're only considering keys that look like `presets.XXX`
+		if len(parts) != 2 {
+			continue
+		}
+		if parts[0] != "presets" {
+			continue
+		}
+
+		layerNamesInOrder = append(layerNamesInOrder, string(parts[1]))
+	}
+
+	return layerNamesInOrder, nil
+
+}
+
+// helper to transfor a key iterator to a slice of strings
+func keyAsStrings(it tomlu.Iterator) []string {
+	var parts []string
+	for it.Next() {
+		n := it.Node()
+		parts = append(parts, string(n.Data))
+	}
+	return parts
+}
+
+// var _ tomlu.Unmarshaler = (*OrderedMap[string, preset])(nil)
+
+// func (m *OrderedMap[string, preset]) UnmarshalTOML(node *tomlu.Node) error {
+// 	fmt.Println(node)
+// 	m = NewOrderedMap[string, preset]()
+// 	// m.Set("asdf", preset{})
+// 	for iter, ok := node.Key(), true; ok; ok = iter.Next() {
+// 		n := iter.Node()
+// 		fmt.Printf("n.Data: %v\n", n.Data)
+// 		// m.Set(k, v)
+// 	}
+
+// 	return nil
+// }
+
+type OrderedMap[K string, V fmt.GoStringer] struct {
+	*orderedmap.OrderedMap[K, V]
+}
+
+func NewOrderedMap[K string, V fmt.GoStringer]() *OrderedMap[K, V] {
+	return &OrderedMap[K, V]{
+		OrderedMap: orderedmap.NewOrderedMap[K, V](),
+	}
+}
+
+// impl `fmt.GoStringer`
+func (m *OrderedMap[K, V]) GoString() string {
+	indent := "    "
+	keys := []K{}
+	values := []V{}
+	for it := m.Front(); it != nil; it = it.Next() {
+		keys = append(keys, it.Key)
+		values = append(values, it.Value)
+	}
+	builder := strings.Builder{}
+	builder.WriteString("{")
+	for i := range keys {
+		key := keys[i]
+		value := values[i]
+		valueLines := strings.Split(value.GoString(), "\n")
+		for i, vl := range valueLines {
+			if i == 0 {
+				continue
+			}
+			valueLines[i] = fmt.Sprintf("%s%s", indent, vl)
+		}
+		indentedVal := strings.Join(valueLines, "\n")
+		builder.WriteString(fmt.Sprintf("\n%s\"%s\": %s", indent, key, indentedVal))
+	}
+	builder.WriteString("\n}")
+	return builder.String()
 }
 
 var defaultCfg = `
