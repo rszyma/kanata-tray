@@ -22,15 +22,16 @@ type Runner struct {
 	clientMessageChannels map[string]chan tcp_client.ClientMessage
 	// Maps preset names to runner indices in `runnerPool` and contexts in `instanceWatcherCtxs`.
 	activeKanataInstances map[string]int
-	kanataInstancePool    []*kanata.Kanata
-	instanceWatcherCtxs   []context.Context
+	// Number of items in channel denotes the number of running kanata instances.
+	kanataInstancePool  []*kanata.Kanata
+	instanceWatcherCtxs []context.Context
 	// Need to have mutex to ensure values in `kanataInstancePool` are not being overwritten
 	// while a value from `activeKanataInstances` is still "borrowed".
 	instancesMappingLock sync.Mutex
 	runnersLimit         int
 }
 
-func NewRunner(ctx context.Context, concurrent bool) *Runner {
+func NewRunner(ctx context.Context) *Runner {
 	activeInstancesLimit := 10
 	return &Runner{
 		retCh:                 make(chan ItemAndPresetName[error]),

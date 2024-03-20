@@ -15,6 +15,10 @@ import (
 type SystrayApp struct {
 	concurrentPresets bool
 
+	// Used when `concurrentPresets` is disabled.
+	// Value -1 denotes that no config is scheduled to run.
+	scheduledPresetIndex int
+
 	presets           []PresetMenuEntry
 	statuses          []KanataStatus
 	presetCancelFuncs []context.CancelFunc // cancel functions can be nil
@@ -36,15 +40,16 @@ type SystrayApp struct {
 
 func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool) *SystrayApp {
 
-	t := &SystrayApp{
-		presets:           menuTemplate,
-		layerIcons:        layerIcons,
-		concurrentPresets: allowConcurrentPresets,
-	}
-
 	systray.SetIcon(icons.Default)
 	systray.SetTitle("kanata-tray")
 	systray.SetTooltip("kanata-tray")
+
+	t := &SystrayApp{
+		presets:              menuTemplate,
+		scheduledPresetIndex: -1,
+		layerIcons:           layerIcons,
+		concurrentPresets:    allowConcurrentPresets,
+	}
 
 	for _, entry := range menuTemplate {
 		menuItem := systray.AddMenuItem(entry.Title(statusIdle), entry.Tooltip())
@@ -76,11 +81,22 @@ func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowC
 }
 
 func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
-	if t.concurrentPresets {
+	if !t.concurrentPresets && t.isAnyPresetRunning() {
 		fmt.Printf("Switching preset to '%s'\n", t.presets[presetIndex].PresetName)
-	} else {
-		fmt.Printf("Running preset '%s'\n", t.presets[presetIndex].PresetName)
+		for i := range t.presets {
+			t.cancel(i)
+			t.setStatus(i, statusIdle)
+		}
+		if t.scheduledPresetIndex != -1 {
+			fmt.Println("the previously scheduled preset was not ran!")
+		}
+		t.scheduledPresetIndex = presetIndex
+		// Preset has been scheduled to run, and will actutally be run when the previous one exits.
+		return
 	}
+
+	fmt.Printf("Running preset '%s'\n", t.presets[presetIndex].PresetName)
+
 	t.setStatus(presetIndex, statusStarting)
 	kanataExecutable := t.presets[presetIndex].Preset.KanataExecutable
 	kanataConfig := t.presets[presetIndex].Preset.KanataConfig
@@ -92,20 +108,28 @@ func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 		cancel()
 		return
 	}
-	t.setStatus(presetIndex, statusRunning)
 	t.cancel(presetIndex)
+	t.setStatus(presetIndex, statusRunning)
 	t.presetCancelFuncs[presetIndex] = cancel
 }
 
 func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder string) {
-	systray.SetIcon(icons.Pause)
+	app.setIcon(icons.Pause)
+
+	// handle autoruns
+	autoranOnePreset := false
 	for i, preset := range app.presets {
 		if preset.Preset.Autorun {
-			app.runPreset(i, runner)
-			if app.concurrentPresets {
-				// Execute only the first preset if multi-exec is disabled.
-				break
+			if !app.concurrentPresets {
+				if !autoranOnePreset {
+					autoranOnePreset = true
+				} else {
+					fmt.Println("WARNING: more than 1 preset has autorun enabled, but " +
+						"can't run them all, because `allow_concurrent_presets` is not enabled.")
+					break
+				}
 			}
+			app.runPreset(i, runner)
 		}
 	}
 
@@ -121,7 +145,7 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				if icon == nil {
 					icon = icons.Default
 				}
-				systray.SetIcon(icon)
+				app.setIcon(icon)
 			}
 			if event.Item.LayerNames != nil {
 				mappedLayers := app.layerIcons.MappedLayers(event.PresetName)
@@ -139,26 +163,30 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				}
 			}
 		case ret := <-retCh:
-			err := ret.Item
-			i, err1 := app.indexFromPresetName(ret.PresetName)
-			if err1 != nil {
+			kanataProcessErr := ret.Item
+			i, err := app.indexFromPresetName(ret.PresetName)
+			if err != nil {
 				fmt.Printf("ERROR: Preset not found: %s\n", ret.PresetName)
 				continue
 			}
-			if err != nil {
-				fmt.Printf("Kanata process terminated with an error: %v\n", err)
+			app.cancel(i)
+			if kanataProcessErr != nil {
+				fmt.Printf("Kanata process terminated with an error: %v\n", kanataProcessErr)
 				app.setStatus(i, statusCrashed)
-				systray.SetIcon(icons.Crash)
+				app.setIcon(icons.Crash)
 			} else {
-				fmt.Println("Kanata process terminated successfully")
+				fmt.Println("Previous kanata process terminated successfully")
 				app.setStatus(i, statusIdle)
 				if app.isAnyPresetRunning() {
-					systray.SetIcon(icons.Default)
+					app.setIcon(icons.Default)
 				} else {
-					systray.SetIcon(icons.Pause)
+					app.setIcon(icons.Pause)
 				}
 			}
-			app.cancel(i)
+			if app.scheduledPresetIndex != -1 {
+				app.runPreset(app.scheduledPresetIndex, runner)
+				app.scheduledPresetIndex = -1
+			}
 		case i := <-app.statusClickedCh:
 			switch app.statuses[i] {
 			case statusIdle:
@@ -167,10 +195,8 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 			case statusRunning:
 				// stop kanata
 				app.cancel(i)
-				app.setStatus(i, statusIdle)
 			case statusCrashed:
 				// restart kanata (from crashed state)
-				fmt.Println("Restarting kanata")
 				app.runPreset(i, runner)
 			}
 		case i := <-app.openLogsClickedCh:
@@ -230,6 +256,10 @@ func (t *SystrayApp) cancel(presetIndex int) {
 		cancel()
 	}
 	t.presetCancelFuncs[presetIndex] = nil
+}
+
+func (t *SystrayApp) setIcon(iconBytes []byte) {
+	systray.SetIcon(iconBytes)
 }
 
 // Returns a channel that sends an index of item that was clicked.

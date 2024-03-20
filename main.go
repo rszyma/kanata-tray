@@ -73,7 +73,7 @@ func mainImpl() error {
 	// Actually we don't really use ctx right now to control kanata-tray termination
 	// so normal contex without cancel will do.
 	ctx := context.Background()
-	runner := runner.NewRunner(ctx, cfg.General.AllowConcurrentPresets)
+	runner := runner.NewRunner(ctx)
 
 	onReady := func() {
 		app := app.NewSystrayApp(menuTemplate, layerIcons, cfg.General.AllowConcurrentPresets)

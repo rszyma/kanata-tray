@@ -16,8 +16,8 @@ import (
 // Reusing with different kanata configs/presets is allowed.
 type Kanata struct {
 	// Prevents race condition when restarting kanata.
-	// This must be written to from from outside to free an internal slot.
-	ProcessSlotCh chan struct{}
+	// This must be written to, to free an internal slot.
+	processSlotCh chan struct{}
 
 	retCh     chan error // Returns the error returned by `cmd.Wait()`
 	cmd       *exec.Cmd
@@ -27,7 +27,7 @@ type Kanata struct {
 
 func NewKanataInstance() *Kanata {
 	return &Kanata{
-		ProcessSlotCh: make(chan struct{}, 1),
+		processSlotCh: make(chan struct{}, 1),
 
 		retCh:     make(chan error),
 		cmd:       nil,
@@ -54,9 +54,9 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 	cmd.SysProcAttr = os_specific.ProcessAttr
 
 	go func() {
-		// We're waiting for previous process to be marked as finished in processing loop.
+		// We're waiting for previous process to be marked as finished.
 		// We will know that happens when the process slot becomes writable.
-		r.ProcessSlotCh <- struct{}{}
+		r.processSlotCh <- struct{}{}
 
 		if r.logFile != nil {
 			r.logFile.Close()
@@ -124,6 +124,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			// kanata crashed or terminated itself
 			r.retCh <- err
 		}
+		<-r.processSlotCh
 	}()
 
 	return nil
