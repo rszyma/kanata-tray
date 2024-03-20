@@ -76,7 +76,7 @@ func mainImpl() error {
 	runner := runner.NewRunner(ctx, cfg.General.AllowConcurrentPresets)
 
 	onReady := func() {
-		app := app.NewSystrayApp(menuTemplate, layerIcons, cfg.General.AllowConcurrentPresets, 12313)
+		app := app.NewSystrayApp(menuTemplate, layerIcons, cfg.General.AllowConcurrentPresets)
 		go app.StartProcessingLoop(runner, cfg.General.AllowConcurrentPresets, configFolder)
 	}
 

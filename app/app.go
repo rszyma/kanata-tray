@@ -20,7 +20,6 @@ type SysTrayApp struct {
 	presetCancelFuncs []context.CancelFunc // cancel functions can be nil
 
 	layerIcons LayerIcons
-	tcpPort    int
 
 	statusClickedCh   chan int // the value sent in channel is an index of preset
 	openLogsClickedCh chan int // the value sent in channel is an index of preset
@@ -35,13 +34,12 @@ type SysTrayApp struct {
 	mQuit    *systray.MenuItem
 }
 
-func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool, tcpPort int) *SysTrayApp {
+func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool) *SysTrayApp {
 
 	t := &SysTrayApp{
 		presets:           menuTemplate,
 		layerIcons:        layerIcons,
 		concurrentPresets: allowConcurrentPresets,
-		tcpPort:           tcpPort,
 	}
 
 	systray.SetIcon(icons.Default)
@@ -87,7 +85,7 @@ func (t *SysTrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	kanataExecutable := t.presets[presetIndex].Preset.KanataExecutable
 	kanataConfig := t.presets[presetIndex].Preset.KanataConfig
 	ctx, cancel := context.WithCancel(context.Background())
-	err := runner.Run(ctx, t.presets[presetIndex].PresetName, kanataExecutable, kanataConfig, t.tcpPort)
+	err := runner.Run(ctx, t.presets[presetIndex].PresetName, kanataExecutable, kanataConfig, t.presets[presetIndex].Preset.TcpPort)
 	if err != nil {
 		fmt.Printf("runner.Run failed with: %v\n", err)
 		t.setStatus(presetIndex, statusCrashed)
