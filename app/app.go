@@ -12,7 +12,7 @@ import (
 	runner_pkg "github.com/rszyma/kanata-tray/runner"
 )
 
-type SysTrayApp struct {
+type SystrayApp struct {
 	concurrentPresets bool
 
 	presets           []PresetMenuEntry
@@ -34,9 +34,9 @@ type SysTrayApp struct {
 	mQuit    *systray.MenuItem
 }
 
-func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool) *SysTrayApp {
+func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool) *SystrayApp {
 
-	t := &SysTrayApp{
+	t := &SystrayApp{
 		presets:           menuTemplate,
 		layerIcons:        layerIcons,
 		concurrentPresets: allowConcurrentPresets,
@@ -75,7 +75,7 @@ func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowC
 	return t
 }
 
-func (t *SysTrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
+func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	if t.concurrentPresets {
 		fmt.Printf("Switching preset to '%s'\n", t.presets[presetIndex].PresetName)
 	} else {
@@ -97,7 +97,7 @@ func (t *SysTrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	t.presetCancelFuncs[presetIndex] = cancel
 }
 
-func (app *SysTrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder string) {
+func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder string) {
 	systray.SetIcon(icons.Pause)
 	for i, preset := range app.presets {
 		if preset.Preset.Autorun {
@@ -199,7 +199,7 @@ func (app *SysTrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 	}
 }
 
-func (t *SysTrayApp) indexFromPresetName(presetName string) (int, error) {
+func (t *SystrayApp) indexFromPresetName(presetName string) (int, error) {
 	for i, p := range t.presets {
 		if p.PresetName == presetName {
 			return i, nil
@@ -208,7 +208,7 @@ func (t *SysTrayApp) indexFromPresetName(presetName string) (int, error) {
 	return 0, fmt.Errorf("not found")
 }
 
-func (t *SysTrayApp) isAnyPresetRunning() bool {
+func (t *SystrayApp) isAnyPresetRunning() bool {
 	for _, status := range t.statuses {
 		if status == statusRunning {
 			return true
@@ -217,14 +217,14 @@ func (t *SysTrayApp) isAnyPresetRunning() bool {
 	return false
 }
 
-func (t *SysTrayApp) setStatus(presetIndex int, status KanataStatus) {
+func (t *SystrayApp) setStatus(presetIndex int, status KanataStatus) {
 	t.statuses[presetIndex] = status
 	t.mPresetStatuses[presetIndex].SetTitle(string(status))
 	t.mPresets[presetIndex].SetTitle(t.presets[presetIndex].Title(status))
 }
 
 // Cancels (stops) preset at given index.
-func (t *SysTrayApp) cancel(presetIndex int) {
+func (t *SystrayApp) cancel(presetIndex int) {
 	cancel := t.presetCancelFuncs[presetIndex]
 	if cancel != nil {
 		cancel()
