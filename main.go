@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/rszyma/kanata-tray/app"
 	"github.com/rszyma/kanata-tray/config"
-	"github.com/rszyma/kanata-tray/icons"
 	"github.com/rszyma/kanata-tray/runner"
 )
 
@@ -64,14 +64,20 @@ func mainImpl() error {
 	if err != nil {
 		return fmt.Errorf("loading config failed: %v", err)
 	}
+	menuTemplate, err := app.MenuTemplateFromConfig(*cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create menu from config: %v", err)
+	}
+	layerIcons := app.ResolveIcons(configFolder, cfg)
 
-	menuTemplate := app.MenuTemplateFromConfig(*cfg)
-	layerIcons := app.ResolveIcons(configFolder, cfg.LayerIcons, icons.Default)
-	runner := runner.NewKanataRunner()
+	// Actually we don't really use ctx right now to control kanata-tray termination
+	// so normal contex without cancel will do.
+	ctx := context.Background()
+	runner := runner.NewRunner(ctx)
 
 	onReady := func() {
-		app := app.NewSystrayApp(&menuTemplate, layerIcons, cfg.General.TcpPort)
-		go app.StartProcessingLoop(&runner, cfg.General.LaunchOnStart, configFolder)
+		app := app.NewSystrayApp(menuTemplate, layerIcons, cfg.General.AllowConcurrentPresets)
+		go app.StartProcessingLoop(runner, configFolder)
 	}
 
 	onExit := func() {

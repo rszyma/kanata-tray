@@ -3,175 +3,164 @@ package runner
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"time"
+	"sort"
+	"sync"
 
-	"github.com/rszyma/kanata-tray/os_specific"
+	"github.com/rszyma/kanata-tray/runner/kanata"
+	"github.com/rszyma/kanata-tray/runner/tcp_client"
 )
 
-type KanataRunner struct {
-	RetCh         chan error    // Returns the error returned by `cmd.Wait()`
-	ProcessSlotCh chan struct{} // prevent race condition when restarting kanata
-
-	ctx               context.Context
-	cmd               *exec.Cmd
-	logFile           *os.File
-	manualTermination bool
-	tcpClient         *KanataTcpClient
+// An item and the preset name for the associated runner.
+type ItemAndPresetName[T any] struct {
+	Item       T
+	PresetName string
 }
 
-func NewKanataRunner() KanataRunner {
-	return KanataRunner{
-		RetCh: make(chan error),
-		// 1 denotes max numer of running kanata processes allowed at a time
-		ProcessSlotCh: make(chan struct{}, 1),
+type Runner struct {
+	retCh                 chan ItemAndPresetName[error]
+	serverMessageCh       chan ItemAndPresetName[tcp_client.ServerMessage]
+	clientMessageChannels map[string]chan tcp_client.ClientMessage
+	// Maps preset names to runner indices in `runnerPool` and contexts in `instanceWatcherCtxs`.
+	activeKanataInstances map[string]int
+	// Number of items in channel denotes the number of running kanata instances.
+	kanataInstancePool  []*kanata.Kanata
+	instanceWatcherCtxs []context.Context
+	// Need to have mutex to ensure values in `kanataInstancePool` are not being overwritten
+	// while a value from `activeKanataInstances` is still "borrowed".
+	instancesMappingLock sync.Mutex
+	runnersLimit         int
+}
 
-		ctx:               context.Background(),
-		cmd:               nil,
-		logFile:           nil,
-		manualTermination: false,
-		tcpClient:         NewTcpClient(),
+func NewRunner(ctx context.Context) *Runner {
+	activeInstancesLimit := 10
+	return &Runner{
+		retCh:                 make(chan ItemAndPresetName[error]),
+		serverMessageCh:       make(chan ItemAndPresetName[tcp_client.ServerMessage]),
+		clientMessageChannels: make(map[string]chan tcp_client.ClientMessage),
+		activeKanataInstances: make(map[string]int),
+		kanataInstancePool:    []*kanata.Kanata{},
+		instanceWatcherCtxs:   []context.Context{},
+		runnersLimit:          activeInstancesLimit,
 	}
 }
 
-// Terminates running kanata process, if there is one.
-func (r *KanataRunner) Stop() error {
-	if r.cmd != nil {
-		if r.cmd.ProcessState != nil {
-			// process was already killed from outside?
-		} else {
-			r.manualTermination = true
-			fmt.Println("Killing the currently running kanata process...")
-			err := r.cmd.Process.Kill()
-			if err != nil {
-				return fmt.Errorf("cmd.Process.Kill failed: %v", err)
+// Run a new kanata instance from a preset. Blocks until the process is started.
+// Calling Run when there's a previous preset running with the the same
+// presetName will block until the previous process finishes.
+// To stop running preset, caller needs to cancel ctx.
+func (r *Runner) Run(ctx context.Context, presetName string, kanataExecutable string, kanataConfig string, tcpPort int) error {
+	r.instancesMappingLock.Lock()
+	defer r.instancesMappingLock.Unlock()
+
+	var instanceIndex int
+
+	// First check if there's an instance for the given preset already running.
+	// If yes, then reuse it. Otherwise reuse free instance if any is available,
+	// or create a new Kanata instance.
+
+	if i, ok := r.activeKanataInstances[presetName]; ok {
+		// reuse (restart) at index
+		instanceIndex = i
+	} else if len(r.activeKanataInstances) < len(r.kanataInstancePool) {
+		// reuse first free instance
+		activeInstanceIndices := []int{}
+		for _, i := range r.activeKanataInstances {
+			activeInstanceIndices = append(activeInstanceIndices, i)
+		}
+		sort.Ints(activeInstanceIndices)
+		for i := 0; i < len(r.kanataInstancePool); i++ {
+			if i >= len(activeInstanceIndices) {
+				instanceIndex = i
+				break
+			}
+			if activeInstanceIndices[i] > i {
+				// kanataInstancePool at index `i` is unused
+				instanceIndex = i
+				break
 			}
 		}
-	}
-	return nil
-}
-
-func (r *KanataRunner) CleanupLogs() error {
-	if r.cmd != nil && r.cmd.ProcessState == nil {
-		return fmt.Errorf("tried to cleanup logs while kanata process is still running")
-	}
-
-	if r.logFile != nil {
-		os.RemoveAll(r.logFile.Name())
-		r.logFile.Close()
-		r.logFile = nil
+	} else {
+		// create new instance
+		if len(r.activeKanataInstances) >= r.runnersLimit {
+			return fmt.Errorf("active instances limit exceeded")
+		}
+		r.kanataInstancePool = append(r.kanataInstancePool, kanata.NewKanataInstance())
+		instanceIndex = len(r.kanataInstancePool) - 1
 	}
 
-	return nil
-}
-
-func (r *KanataRunner) RunNonblocking(kanataExecutablePath string, kanataConfigPath string, tcpPort int) error {
-	err := r.Stop()
+	instance := r.kanataInstancePool[instanceIndex]
+	err := instance.RunNonblocking(ctx, kanataExecutable, kanataConfig, tcpPort)
 	if err != nil {
-		return fmt.Errorf("failed to stop the previous process: %v", err)
+		return fmt.Errorf("failed to run kanata: %v", err)
 	}
-
-	cmd := exec.CommandContext(r.ctx, kanataExecutablePath, "-c", kanataConfigPath, "--port", fmt.Sprint(tcpPort))
-	cmd.SysProcAttr = os_specific.ProcessAttr
+	r.activeKanataInstances[presetName] = instanceIndex
+	r.clientMessageChannels[presetName] = make(chan tcp_client.ClientMessage)
 
 	go func() {
-		// We're waiting for previous process to be marked as finished in processing loop.
-		// We will know that happens when the process slot becomes writable.
-		r.ProcessSlotCh <- struct{}{}
+		<-ctx.Done()
+		r.instancesMappingLock.Lock()
+		defer r.instancesMappingLock.Unlock()
+		delete(r.activeKanataInstances, presetName)
+		delete(r.clientMessageChannels, presetName)
+	}()
 
-		err = r.CleanupLogs()
-		if err != nil {
-			// This is non-critical, we can probably continue operating normally.
-			fmt.Printf("WARN: process logs cleanup failed: %v\n", err)
-		}
-
-		r.logFile, err = os.CreateTemp("", "kanata_lastrun_*.log")
-		if err != nil {
-			r.RetCh <- fmt.Errorf("failed to create temp file: %v", err)
-			return
-		}
-
-		r.cmd = cmd
-		r.cmd.Stdout = r.logFile
-		r.cmd.Stderr = r.logFile
-
-		fmt.Printf("Running command: %s\n", r.cmd.String())
-
-		err = r.cmd.Start()
-		if err != nil {
-			r.RetCh <- fmt.Errorf("failed to start process: %v", err)
-			return
-		}
-
-		fmt.Printf("Started kanata (pid=%d)\n", r.cmd.Process.Pid)
-
-		tcpConnectionCtx, cancelTcpConnection := context.WithCancel(r.ctx)
-		// Need to wait until kanata boot up and setups the TCP server.
-		// 2000 ms is default boot delay in kanata.
-		time.Sleep(time.Millisecond * 2100)
-
-		go func() {
-			r.tcpClient.reconnect <- struct{}{} // this shoudn't block, because reconnect chan should have 1-len buffer
-			// Loop in order to reconnect when kanata disconnects us.
-			// We might be disconnected if an older version of kanata is used.
-			for {
-				select {
-				case <-tcpConnectionCtx.Done():
-					return
-				case <-r.tcpClient.reconnect:
-					err := r.tcpClient.Connect(tcpConnectionCtx, tcpPort)
-					if err != nil {
-						fmt.Printf("Failed to connect to kanata via TCP: %v\n", err)
-					}
+	go func() {
+		retCh := instance.RetCh()
+		serverMessageCh := instance.ServerMessageCh()
+		clientMesasgeCh := r.clientMessageChannels[presetName]
+		for {
+			select {
+			case ret := <-retCh:
+				r.retCh <- ItemAndPresetName[error]{
+					Item:       ret,
+					PresetName: presetName,
 				}
+				return
+			case msg := <-serverMessageCh:
+				r.serverMessageCh <- ItemAndPresetName[tcp_client.ServerMessage]{
+					Item:       msg,
+					PresetName: presetName,
+				}
+			case msg := <-clientMesasgeCh:
+				instance.SendClientMessage(msg)
 			}
-		}()
-
-		// Send request for layer names. We may or may not get response
-		// depending on kanata version). The support for it was implemented in:
-		// https://github.com/jtroo/kanata/commit/d66c3c77bcb3acbf58188272177d64bed4130b6e
-		err = r.SendClientMessage(ClientMessage{RequestLayerNames: struct{}{}})
-		if err != nil {
-			fmt.Printf("Failed to send ClientMessage: %v\n", err)
-		}
-
-		err = r.cmd.Wait()
-		r.cmd = nil
-		cancelTcpConnection()
-		if r.manualTermination {
-			r.manualTermination = false
-			r.RetCh <- nil
-		} else {
-			r.RetCh <- err
 		}
 	}()
 
 	return nil
 }
 
-func (r *KanataRunner) LogFile() (string, error) {
-	if r.logFile == nil {
-		return "", fmt.Errorf("log file doesn't exist")
+// An error will be returned if a preset doesn't exists or there's currently no
+// opened TCP connection for the given preset.
+//
+// FIXME: message can be sent to a wrong kanata process during live-reloading
+// if a preset has been changed but there's a preset with the same name as in
+// previous kanata-tray configuration. Unlikely to ever happen though
+// (also live-reloading is not implemented at the time of writing).
+func (r *Runner) SendClientMessage(presetName string, msg tcp_client.ClientMessage) error {
+	r.instancesMappingLock.Lock()
+	defer r.instancesMappingLock.Unlock()
+	presetIndex, ok := r.activeKanataInstances[presetName]
+	if !ok {
+		return fmt.Errorf("preset with the given name not found")
 	}
-	return r.logFile.Name(), nil
+	return r.kanataInstancePool[presetIndex].SendClientMessage(msg)
 }
 
-func (r *KanataRunner) ServerMessageCh() chan ServerMessage {
-	return r.tcpClient.ServerMessageCh
+func (r *Runner) RetCh() <-chan ItemAndPresetName[error] {
+	return r.retCh
 }
 
-// If currently there's no opened TCP connection, an error will be returned.
-func (r *KanataRunner) SendClientMessage(msg ClientMessage) error {
-	timeout := 200 * time.Millisecond
-	timer := time.NewTimer(timeout)
-	select {
-	case <-timer.C:
-		return fmt.Errorf("timeouted after %d ms", timeout.Milliseconds())
-	case r.tcpClient.clientMessageCh <- msg:
-		if !timer.Stop() {
-			<-timer.C
-		}
+func (r *Runner) ServerMessageCh() <-chan ItemAndPresetName[tcp_client.ServerMessage] {
+	return r.serverMessageCh
+}
+
+func (r *Runner) LogFile(presetName string) (string, error) {
+	r.instancesMappingLock.Lock()
+	defer r.instancesMappingLock.Unlock()
+	presetIndex, ok := r.activeKanataInstances[presetName]
+	if !ok {
+		return "", fmt.Errorf("preset with the given name not found")
 	}
-	return nil
+	return r.kanataInstancePool[presetIndex].LogFile()
 }
