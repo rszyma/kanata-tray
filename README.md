@@ -22,7 +22,7 @@ On Windows, it's `C:\Users\<YourUsername>\AppData\Roaming\kanata-tray`
 An example of customized configuration file:
 
 ```toml
-'$schema' = 'https://raw.githubusercontent.com/rszyma/kanata-tray/v0.2.0/doc/config_schema.json'
+'$schema' = 'https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json'
 
 [general]
 allow_concurrent_presets = false
@@ -72,9 +72,8 @@ Other notes:
 
 In VSCode to get editor support for your kanata-tray config, install [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml#completion-and-validation-with-json-schema) extension and the following line at the top of your `config.toml` file. 
 ```toml
-"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/v0.2.0/doc/config_schema.json"
+"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json"
 ```
-Make sure to replace version number in the schema link with whatever kanata-tray version you use.
 
 ## Supported Kanata Versions
 
