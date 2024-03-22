@@ -43,22 +43,37 @@ func main() {
 }
 
 func mainImpl() error {
-	configFolder := configdir.LocalConfig("kanata-tray")
-	fmt.Printf("kanata-tray config folder: %s\n", configFolder)
+	configFileName := "config.toml"
+	var configFile string
+	var configFolder string
 
-	// Create folder. No-op if exists.
-	err := configdir.MakePath(configFolder)
+	// First try reading config.toml from the folder where kanata-tray is located.
+	exePath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("failed to create folder: %v", err)
+		fmt.Println("Failed attempt to read config.toml from kanata-tray folder", err)
 	}
+	localConfigFolder := filepath.Dir(exePath)
+	localConfigFile := filepath.Join(localConfigFolder, configFileName)
+	if _, err := os.Stat(localConfigFile); os.IsNotExist(err) {
+		configFolder = configdir.LocalConfig("kanata-tray")
+		configFile = filepath.Join(configFolder, configFileName)
+		// Create folder. No-op if exists.
+		err = configdir.MakePath(configFolder)
+		if err != nil {
+			return fmt.Errorf("failed to create folder: %v", err)
+		}
+	} else {
+		configFolder = localConfigFolder
+		configFile = localConfigFile
+	}
+
+	fmt.Printf("kanata-tray config folder: %s\n", configFolder)
 
 	// Make sure "icons" folder exists too.
 	err = configdir.MakePath(filepath.Join(configFolder, "icons"))
 	if err != nil {
 		return fmt.Errorf("failed to create folder: %v", err)
 	}
-
-	configFile := filepath.Join(configFolder, "config.toml")
 
 	cfg, err := config.ReadConfigOrCreateIfNotExist(configFile)
 	if err != nil {
