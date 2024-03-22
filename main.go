@@ -43,14 +43,14 @@ func main() {
 }
 
 func mainImpl() error {
-	configFileName := "config.toml"
+	configFileName := "kanata-tray.toml"
 	var configFile string
 	var configFolder string
 
-	// First try reading config.toml from the folder where kanata-tray is located.
+	// First try reading kanata-tray.toml from the folder where kanata-tray is located.
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Println("Failed attempt to read config.toml from kanata-tray folder", err)
+		fmt.Println("Failed attempt to read kanata-tray.toml from kanata-tray folder", err)
 	}
 	localConfigFolder := filepath.Dir(exePath)
 	localConfigFile := filepath.Join(localConfigFolder, configFileName)
