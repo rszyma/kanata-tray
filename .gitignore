@@ -1,3 +1,6 @@
+# release folder
 dist
-config*.toml
+
+# ignore config file and icons folder
+*.toml 
 icons
