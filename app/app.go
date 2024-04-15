@@ -101,7 +101,7 @@ func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	kanataExecutable := t.presets[presetIndex].Preset.KanataExecutable
 	kanataConfig := t.presets[presetIndex].Preset.KanataConfig
 	ctx, cancel := context.WithCancel(context.Background())
-	err := runner.Run(ctx, t.presets[presetIndex].PresetName, kanataExecutable, kanataConfig, t.presets[presetIndex].Preset.TcpPort)
+	err := runner.Run(ctx, t.presets[presetIndex].PresetName, kanataExecutable, kanataConfig, t.presets[presetIndex].Preset.TcpPort, t.presets[presetIndex].Preset.Hooks)
 	if err != nil {
 		fmt.Printf("runner.Run failed with: %v\n", err)
 		t.setStatus(presetIndex, statusCrashed)

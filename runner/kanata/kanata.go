@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/rszyma/kanata-tray/config"
 	"github.com/rszyma/kanata-tray/os_specific"
 	"github.com/rszyma/kanata-tray/runner/tcp_client"
 )
@@ -36,7 +39,7 @@ func NewKanataInstance() *Kanata {
 	}
 }
 
-func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string, tcpPort int) error {
+func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string, tcpPort int, hooks config.Hooks) error {
 	if kanataExecutable == "" {
 		var err error
 		kanataExecutable, err = exec.LookPath("kanata")
@@ -72,6 +75,11 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		r.cmd.Stdout = r.logFile
 		r.cmd.Stderr = r.logFile
 
+		ok := runAllHooksBlocking(hooks.PreStart, "pre-start")
+		if !ok {
+			r.retCh <- fmt.Errorf("at least 1 pre-start hooks failed")
+		}
+
 		fmt.Printf("Running command: %s\n", r.cmd.String())
 
 		err = r.cmd.Start()
@@ -86,6 +94,11 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		// Need to wait until kanata boot up and setups the TCP server.
 		// 2000 ms is a default boot delay in kanata.
 		time.Sleep(time.Millisecond * 2100)
+
+		ok = runAllHooksBlocking(hooks.PostStart, "post-start")
+		if !ok {
+			r.retCh <- fmt.Errorf("at least 1 post-start hooks failed")
+		}
 
 		go func() {
 			r.tcpClient.Reconnect <- struct{}{} // this shoudn't block, because reconnect chan should have 1-len buffer
@@ -124,6 +137,10 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			// kanata crashed or terminated itself
 			r.retCh <- err
 		}
+		ok = runAllHooksBlocking(hooks.PostStop, "post-stop")
+		if !ok {
+			r.retCh <- fmt.Errorf("at least 1 post-stop hooks failed")
+		}
 		<-r.processSlotCh
 	}()
 
@@ -158,4 +175,41 @@ func (r *Kanata) SendClientMessage(msg tcp_client.ClientMessage) error {
 		}
 	}
 	return nil
+}
+
+// `hookType` - stringified hook type e.g. "pre-start".
+// Returns bool indicating whether any process failed (e.g. returned non-0 status).
+func runAllHooksBlocking(hooks []string, hookType string) bool {
+	timeout := 3 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	wg := sync.WaitGroup{}
+	wg.Add(len(hooks))
+	anyProcessFailed := atomic.Bool{}
+	for _, hook := range hooks {
+		fmt.Printf("Running '%s' hook '%s'\n", hookType, hook)
+		hook := hook // fix race condition
+		go func() {
+			defer wg.Done()
+			cmd := exec.CommandContext(ctx, hook)
+			cmd.SysProcAttr = os_specific.ProcessAttr
+			// TODO: capture stdout/stderr
+			// cmd.Stdout = logFile
+			// cmd.Stderr = logFile
+			err := cmd.Start()
+			if err != nil {
+				fmt.Printf("Failed to run hook '%s': %v\n", hook, err)
+				anyProcessFailed.Store(true)
+				return
+			}
+			err = cmd.Wait()
+			if err != nil {
+				fmt.Printf("Hook process '%s' failed with an error: %v\n", hook, err)
+				anyProcessFailed.Store(true)
+				return
+			}
+		}()
+	}
+	wg.Wait()
+	return anyProcessFailed.Load()
 }

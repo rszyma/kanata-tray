@@ -25,6 +25,7 @@ type Preset struct {
 	KanataConfig     string
 	TcpPort          int
 	LayerIcons       map[string]string
+	Hooks            Hooks
 }
 
 func (m *Preset) GoString() string {
@@ -51,6 +52,14 @@ type preset struct {
 	KanataConfig     *string           `toml:"kanata_config"`
 	TcpPort          *int              `toml:"tcp_port"`
 	LayerIcons       map[string]string `toml:"layer_icons"`
+	Hooks            *Hooks            `toml:"hooks"`
+}
+
+type Hooks struct {
+	PreStart  []string `toml:"pre-start"`
+	PostStart []string `toml:"post-start"`
+	// PostStartAsync []string `toml:"post-start-async"`
+	PostStop []string `toml:"post-stop"`
 }
 
 func (p *preset) applyDefaults(defaults *preset) {
@@ -66,11 +75,14 @@ func (p *preset) applyDefaults(defaults *preset) {
 	if p.TcpPort == nil {
 		p.TcpPort = defaults.TcpPort
 	}
-	// This is intended because we layer icons are handled specially.
+	//// Excluding layer icons is intended because they are handled specially.
 	//
 	// if p.LayerIcons == nil {
 	// 	p.LayerIcons = defaults.LayerIcons
 	// }
+	if p.Hooks == nil {
+		p.Hooks = defaults.Hooks
+	}
 }
 
 func (p *preset) intoExported() *Preset {
@@ -89,6 +101,9 @@ func (p *preset) intoExported() *Preset {
 	}
 	if p.LayerIcons != nil {
 		result.LayerIcons = p.LayerIcons
+	}
+	if p.Hooks != nil {
+		result.Hooks = *p.Hooks
 	}
 	return result
 }
