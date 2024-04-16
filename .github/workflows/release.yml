@@ -53,6 +53,7 @@ jobs:
       - name: Download Linux and Windows artifacts
         uses: actions/download-artifact@v2
         with:
+          name: linux-windows-artifacts
 
       - name: Build for darwin
         run: |
