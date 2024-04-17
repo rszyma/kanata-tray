@@ -9,7 +9,7 @@ build_release_linux version="latest":
     GOOS=linux CGO_ENABLED=1 GO111MODULE=on go build -ldflags "-s -w -X 'main.buildVersion={{version}}' -X 'main.buildHash=$(git rev-parse HEAD)' -X 'main.buildDate=$(date -u)'" -trimpath -o dist/kanata-tray
 
 build_release_darwin version="latest":
-    GOOS=darwin CGO_ENABLED=1 GO111MODULE=on go build -ldflags "-s -w -X 'main.buildVersion=latest' -X 'main.buildHash=$(git rev-parse HEAD)' -X 'main.buildDate=$(date -u)'" -trimpath -o dist/kanata-tray-darwin
+    GOOS=darwin CGO_ENABLED=1 GO111MODULE=on go build -ldflags "-s -w -X 'main.buildVersion={{version}}' -X 'main.buildHash=$(git rev-parse HEAD)' -X 'main.buildDate=$(date -u)'" -trimpath -o dist/kanata-tray-darwin
 
 build_release_windows version="latest":
     GOOS=windows CGO_ENABLED=1 GO111MODULE=on go build -ldflags "-H=windowsgui -s -w -X 'main.buildVersion={{version}}' -X 'main.buildHash=$(git rev-parse HEAD)' -X 'main.buildDate=$(date -u)'" -trimpath -o dist/kanata-tray.exe
