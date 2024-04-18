@@ -27,6 +27,7 @@ jobs:
           version=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           just build_release_linux $version
           just build_release_windows $version
+          just build_release_macos $version
           
       - name: Release 
         uses: softprops/action-gh-release@v1 
@@ -36,4 +37,5 @@ jobs:
           files: |
             ./dist/kanata-tray.exe
             ./dist/kanata-tray
+            ./dist/kanata-tray-macos
             LICENSE

@@ -1,7 +1,7 @@
 # kanata-tray
 
 A simple wrapper for [kanata](https://github.com/jtroo/kanata) to control it from tray icon. 
-Works on Windows and Linux.
+Works on Windows, Linux and macOS.
 
 ## Features
 
@@ -17,8 +17,10 @@ You can access it from from: `Click Tray Icon > Configure`.
 
 Config file name is `kanata-tray.toml`.
 
-On Linux, the config folder location is `~/.config/kanata-tray`. 
-On Windows, it's `C:\Users\<YourUsername>\AppData\Roaming\kanata-tray`
+The config folder location:
+- Linux `~/.config/kanata-tray`. 
+- Windows `C:\Users\<YourUsername>\AppData\Roaming\kanata-tray`
+- macOS `$HOME/Library/Application\ Support/kanata-tray`
 
 Alternatively, you can place your config file in the same folder as kanata-tray executable, 
 and it will be have higher priority than the global config in user folder. 
