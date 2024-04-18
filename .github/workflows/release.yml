@@ -5,66 +5,37 @@ on:
       - "v*.*.*"
 
 jobs:
-  release_linux_windows:
+  release: 
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.21"
-
+          go-version: '1.21'
+        
       - name: Install dependencies
         run: |
           sudo apt-get install libayatana-appindicator3-dev
 
       - name: Install just
         uses: taiki-e/install-action@just
-
-      - name: Build for Linux and Windows
+          
+      - name: Build
         run: |
           version=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           just build_release_linux $version
           just build_release_windows $version
-
-      - name: Upload Linux and Windows artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: linux-windows-artifacts
-          path: |
+          just build_release_macos $version
+          
+      - name: Release 
+        uses: softprops/action-gh-release@v1 
+        with: 
+          draft: false 
+          prerelease: false 
+          files: |
             ./dist/kanata-tray.exe
             ./dist/kanata-tray
-
-  release_darwin:
-    needs: release_linux_windows
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.21"
-
-      - name: Install just
-        uses: taiki-e/install-action@just
-
-      - name: Download Linux and Windows artifacts
-        uses: actions/download-artifact@v2
-        with:
-          name: linux-windows-artifacts
-
-      - name: Build for darwin
-        run: |
-          version=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-          just build_release_darwin $version
-
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        with:
-          draft: false
-          prerelease: false
-          files: |
-            ./dist/kanata-tray-darwin
+            ./dist/kanata-tray-macos
             LICENSE
