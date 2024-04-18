@@ -34,7 +34,7 @@ jobs:
           name: linux-windows-artifacts
           path: |
             ./dist/kanata-tray.exe
-            ./dist/kanata-tray
+            ./dist/kanata-tray-linux
 
   release_darwin:
     needs: release_linux_windows
@@ -66,5 +66,7 @@ jobs:
           draft: false
           prerelease: false
           files: |
+            ./dist/kanata-tray.exe
+            ./dist/kanata-tray-linux
             ./dist/kanata-tray-macos
             LICENSE
