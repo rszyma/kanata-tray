@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/rszyma/kanata-tray/config"
@@ -53,13 +52,18 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		cfgArg = "-c=" + kanataConfig
 	}
 
-	cmd := exec.CommandContext(ctx, kanataExecutable, cfgArg, "--port", fmt.Sprint(tcpPort))
-	cmd.SysProcAttr = os_specific.ProcessAttr
+	cmd := Cmd(ctx, kanataExecutable, cfgArg, "--port", fmt.Sprint(tcpPort))
 
 	go func() {
+		selfCtx, selfCancel := context.WithCancelCause(ctx)
+		defer selfCancel(nil)
+
 		// We're waiting for previous process to be marked as finished.
 		// We will know that happens when the process slot becomes writable.
 		r.processSlotCh <- struct{}{}
+		defer func() {
+			<-r.processSlotCh
+		}()
 
 		if r.logFile != nil {
 			r.logFile.Close()
@@ -75,9 +79,10 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		r.cmd.Stdout = r.logFile
 		r.cmd.Stderr = r.logFile
 
-		ok := runAllHooksBlocking(hooks.PreStart, "pre-start")
-		if !ok {
-			r.retCh <- fmt.Errorf("at least 1 pre-start hooks failed")
+		err = runAllBlockingHooks(hooks.PreStart, "pre-start")
+		if err != nil {
+			r.retCh <- fmt.Errorf("hook failed: %s", err)
+			return
 		}
 
 		fmt.Printf("Running command: %s\n", r.cmd.String())
@@ -90,15 +95,34 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 
 		fmt.Printf("Started kanata (pid=%d)\n", r.cmd.Process.Pid)
 
-		tcpConnectionCtx, cancelTcpConnection := context.WithCancel(ctx)
 		// Need to wait until kanata boot up and setups the TCP server.
-		// 2000 ms is a default boot delay in kanata.
-		time.Sleep(time.Millisecond * 2100)
+		// 2000 ms is a default start delay in kanata.
+		time.Sleep(time.Millisecond * 2500)
 
-		ok = runAllHooksBlocking(hooks.PostStart, "post-start")
-		if !ok {
-			r.retCh <- fmt.Errorf("at least 1 post-start hooks failed")
+		err = runAllBlockingHooks(hooks.PostStart, "post-start")
+		if err != nil {
+			r.retCh <- fmt.Errorf("hook failed: %s", err)
+			return
 		}
+		anyPostStartAsyncHookErroredCh := make(chan error, 1)
+		allPostStartAsyncHooksExitedCh := make(chan struct{}, 1)
+		err = runAllAsyncHooks(selfCtx, hooks.PostStartAsync, "post-start-async", anyPostStartAsyncHookErroredCh, allPostStartAsyncHooksExitedCh)
+		if err != nil {
+			r.retCh <- fmt.Errorf("hook failed: %s", err)
+			return
+		}
+
+		go func() {
+			for {
+				select {
+				case <-selfCtx.Done():
+					return
+				case err := <-anyPostStartAsyncHookErroredCh:
+					fmt.Println("An async hook errored, stopping preset.")
+					selfCancel(err)
+				}
+			}
+		}()
 
 		go func() {
 			r.tcpClient.Reconnect <- struct{}{} // this shoudn't block, because reconnect chan should have 1-len buffer
@@ -106,10 +130,10 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			// We might be disconnected if an older version of kanata is used.
 			for {
 				select {
-				case <-tcpConnectionCtx.Done():
+				case <-selfCtx.Done():
 					return
 				case <-r.tcpClient.Reconnect:
-					err := r.tcpClient.Connect(tcpConnectionCtx, tcpPort)
+					err := r.tcpClient.Connect(selfCtx, tcpPort)
 					if err != nil {
 						fmt.Printf("Failed to connect to kanata via TCP: %v\n", err)
 					}
@@ -123,25 +147,41 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		err = r.SendClientMessage(tcp_client.ClientMessage{RequestLayerNames: struct{}{}})
 		if err != nil {
 			fmt.Printf("Failed to send ClientMessage: %v\n", err)
+			// this is non-critical, so we continue
 		}
 
-		err = r.cmd.Wait() // block until kanata exits
-
+		cmdErr := r.cmd.Wait() // block until kanata exits
 		r.cmd = nil
-		cancelTcpConnection()
-		if ctx.Err() != nil {
-			// A non-nil ctx err means that the kill was issued from outside,
-			// not the process itself (e.g. crash).
+
+		fmt.Println("Waiting for all async post-start-async hooks to exit")
+		<-allPostStartAsyncHooksExitedCh
+
+		err = runAllBlockingHooks(hooks.PostStop, "post-stop")
+		if err != nil {
+			r.retCh <- fmt.Errorf("hook failed: %s", err)
+			return
+		}
+
+		selfCtxErr := selfCtx.Err()
+		if selfCtxErr != nil && selfCtxErr != context.DeadlineExceeded && selfCtxErr != context.Canceled {
+			// must be an error from async hook
+			r.retCh <- selfCtxErr
+			return
+		}
+
+		if ctx.Err() == context.Canceled {
+			// kill was issued from outside
 			r.retCh <- nil
-		} else {
+			return
+		}
+
+		if cmdErr != nil {
 			// kanata crashed or terminated itself
-			r.retCh <- err
+			r.retCh <- cmdErr
+			return
 		}
-		ok = runAllHooksBlocking(hooks.PostStop, "post-stop")
-		if !ok {
-			r.retCh <- fmt.Errorf("at least 1 post-stop hooks failed")
-		}
-		<-r.processSlotCh
+
+		r.retCh <- nil
 	}()
 
 	return nil
@@ -177,39 +217,89 @@ func (r *Kanata) SendClientMessage(msg tcp_client.ClientMessage) error {
 	return nil
 }
 
-// `hookType` - stringified hook type e.g. "pre-start".
-// Returns bool indicating whether any process failed (e.g. returned non-0 status).
-func runAllHooksBlocking(hooks []string, hookType string) bool {
+// Runs all hooks at the same time, blocking waiting for all of them to finish,
+// or they get killed after short timeout.
+//
+// Returns first encountered error within all hook errors.
+//
+// `hookName` - stringified hook type e.g. "pre-start".
+func runAllBlockingHooks(hooks []string, hookName string) error {
 	timeout := 3 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	wg := sync.WaitGroup{}
 	wg.Add(len(hooks))
-	anyProcessFailed := atomic.Bool{}
-	for _, hook := range hooks {
-		fmt.Printf("Running '%s' hook '%s'\n", hookType, hook)
+	var errors = make([]error, len(hooks))
+	for i, hook := range hooks {
+		fmt.Printf("Running '%s' hook '%s'\n", hookName, hook)
+		i := i       // fix race condition
 		hook := hook // fix race condition
 		go func() {
 			defer wg.Done()
-			cmd := exec.CommandContext(ctx, hook)
-			cmd.SysProcAttr = os_specific.ProcessAttr
-			// TODO: capture stdout/stderr
-			// cmd.Stdout = logFile
-			// cmd.Stderr = logFile
+			cmd := Cmd(ctx, hook)
+			// TODO: capture stdout/stderr?
 			err := cmd.Start()
 			if err != nil {
-				fmt.Printf("Failed to run hook '%s': %v\n", hook, err)
-				anyProcessFailed.Store(true)
+				errors[i] = fmt.Errorf("failed to run hook '%s': %v", hook, err)
 				return
 			}
 			err = cmd.Wait()
 			if err != nil {
-				fmt.Printf("Hook process '%s' failed with an error: %v\n", hook, err)
-				anyProcessFailed.Store(true)
+				errors[i] = fmt.Errorf("hook process '%s' failed with an error: %v", hook, err)
 				return
 			}
 		}()
 	}
 	wg.Wait()
-	return anyProcessFailed.Load()
+	for _, err := range errors {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// `hookName` - stringified hook type e.g. "pre-start".
+//
+// Returns an error if any error ocurred during startup of any hook.
+func runAllAsyncHooks(ctx context.Context, hooks []string, hookName string, anyHookErroredCh chan<- error, allHooksExitedCh chan<- struct{}) error {
+	anyHookErrored := false
+	wg := sync.WaitGroup{}
+	wg.Add(len(hooks))
+	go func() {
+		wg.Wait()
+		allHooksExitedCh <- struct{}{}
+	}()
+	for _, hook := range hooks {
+		fmt.Printf("Running '%s' hook '%s'\n", hookName, hook)
+		hook := hook // fix race condition
+		cmd := Cmd(ctx, hook)
+		// TODO: capture stdout/stderr?
+		err := cmd.Start()
+		if err != nil {
+			fmt.Printf("Failed to run hook '%s': %v", hook, err)
+			return err
+		}
+		go func() {
+			defer wg.Done()
+			err := cmd.Wait()
+			if err != nil {
+				fmt.Printf("Hook process '%s' failed with an error: %v", hook, err)
+				if !anyHookErrored {
+					anyHookErrored = true
+					anyHookErroredCh <- err
+				}
+			} else {
+				fmt.Printf("%s hook '%s' has successfully exited\n", hookName, hook)
+			}
+		}()
+	}
+	return nil
+}
+
+func Cmd(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = 3 * time.Second
+	cmd.SysProcAttr = os_specific.ProcessAttr
+	return cmd
 }

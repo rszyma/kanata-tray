@@ -56,10 +56,10 @@ type preset struct {
 }
 
 type Hooks struct {
-	PreStart  []string `toml:"pre-start"`
-	PostStart []string `toml:"post-start"`
-	// PostStartAsync []string `toml:"post-start-async"`
-	PostStop []string `toml:"post-stop"`
+	PreStart       []string `toml:"pre-start"`
+	PostStart      []string `toml:"post-start"`
+	PostStartAsync []string `toml:"post-start-async"`
+	PostStop       []string `toml:"post-stop"`
 }
 
 func (p *preset) applyDefaults(defaults *preset) {
