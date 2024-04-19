@@ -114,14 +114,12 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		}
 
 		go func() {
-			for {
-				select {
-				case <-selfCtx.Done():
-					return
-				case err := <-anyPostStartAsyncHookErroredCh:
-					fmt.Println("An async hook errored, stopping preset.")
-					selfCancel(err)
-				}
+			select {
+			case <-selfCtx.Done():
+				return
+			case err := <-anyPostStartAsyncHookErroredCh:
+				fmt.Println("An async hook errored, stopping preset.")
+				selfCancel(err)
 			}
 		}()
 
