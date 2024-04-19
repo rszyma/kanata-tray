@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,7 +53,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		cfgArg = "-c=" + kanataConfig
 	}
 
-	cmd := Cmd(ctx, kanataExecutable, cfgArg, "--port", fmt.Sprint(tcpPort))
+	cmd := cmd(ctx, kanataExecutable, cfgArg, "--port", fmt.Sprint(tcpPort))
 
 	go func() {
 		selfCtx, selfCancel := context.WithCancelCause(ctx)
@@ -153,8 +154,9 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		cmdErr := r.cmd.Wait() // block until kanata exits
 		r.cmd = nil
 
-		fmt.Println("Waiting for all async post-start-async hooks to exit")
+		fmt.Println("Waiting for all post-start-async hooks to exit")
 		<-allPostStartAsyncHooksExitedCh
+		fmt.Println("All post-start-async hooks exited")
 
 		err = runAllBlockingHooks(hooks.PostStop, "post-stop")
 		if err != nil {
@@ -231,23 +233,25 @@ func runAllBlockingHooks(hooks []string, hookName string) error {
 	wg.Add(len(hooks))
 	var errors = make([]error, len(hooks))
 	for i, hook := range hooks {
-		fmt.Printf("Running '%s' hook '%s'\n", hookName, hook)
+		fmt.Printf("Running %s hook [%d] '%s'\n", hookName, i, hook)
 		i := i       // fix race condition
 		hook := hook // fix race condition
 		go func() {
 			defer wg.Done()
-			cmd := Cmd(ctx, hook)
+			exe, args := parseCmd(hook)
+			cmd := cmd(ctx, exe, args...)
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
 			if err != nil {
-				errors[i] = fmt.Errorf("failed to run hook '%s': %v", hook, err)
+				errors[i] = fmt.Errorf("failed to run %s hook [%d]: %v", hookName, i, err)
 				return
 			}
 			err = cmd.Wait()
 			if err != nil {
-				errors[i] = fmt.Errorf("hook process '%s' failed with an error: %v", hook, err)
+				errors[i] = fmt.Errorf("hook '%s' [%d] failed with an error: %v", hook, i, err)
 				return
 			}
+			fmt.Printf("%s [%d] exited OK\n", hookName, i)
 		}()
 	}
 	wg.Wait()
@@ -270,36 +274,48 @@ func runAllAsyncHooks(ctx context.Context, hooks []string, hookName string, anyH
 		wg.Wait()
 		allHooksExitedCh <- struct{}{}
 	}()
-	for _, hook := range hooks {
-		fmt.Printf("Running '%s' hook '%s'\n", hookName, hook)
+	for i, hook := range hooks {
+		fmt.Printf("Running %s hook [%d] '%s'\n", hookName, i, hook)
+		i := i       // fix race condition
 		hook := hook // fix race condition
-		cmd := Cmd(ctx, hook)
+		exe, args := parseCmd(hook)
+		cmd := cmd(ctx, exe, args...)
 		// TODO: capture stdout/stderr?
 		err := cmd.Start()
 		if err != nil {
-			fmt.Printf("Failed to run hook '%s': %v", hook, err)
+			fmt.Printf("Failed to run %s hook [%d]: %v\n", hookName, i, err)
 			return err
 		}
 		go func() {
 			defer wg.Done()
 			err := cmd.Wait()
 			if err != nil {
-				fmt.Printf("Hook process '%s' failed with an error: %v", hook, err)
+				fmt.Printf("Hook '%s' [%d] failed with an error: %v\n", hook, i, err)
 				if !anyHookErrored {
 					anyHookErrored = true
 					anyHookErroredCh <- err
 				}
-			} else {
-				fmt.Printf("%s hook '%s' has successfully exited\n", hookName, hook)
+				return
 			}
+			fmt.Printf("%s [%d] exited OK\n", hookName, i)
 		}()
 	}
 	return nil
 }
 
-func Cmd(ctx context.Context, name string, args ...string) *exec.Cmd {
+func cmd(ctx context.Context, name string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.WaitDelay = 3 * time.Second
 	cmd.SysProcAttr = os_specific.ProcessAttr
 	return cmd
+}
+
+// TODO: implement proper "" and ” parsing.
+func parseCmd(cmdWithArgs string) (string, []string) {
+	exe, argsStr, found := strings.Cut(cmdWithArgs, " ")
+	if !found {
+		return cmdWithArgs, nil
+	}
+	args := strings.Split(argsStr, "")
+	return exe, args
 }
