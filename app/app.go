@@ -163,15 +163,15 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				}
 			}
 		case ret := <-retCh:
-			kanataProcessErr := ret.Item
+			runnerPipelineErr := ret.Item
 			i, err := app.indexFromPresetName(ret.PresetName)
 			if err != nil {
 				fmt.Printf("ERROR: Preset not found: %s\n", ret.PresetName)
 				continue
 			}
 			app.cancel(i)
-			if kanataProcessErr != nil {
-				fmt.Printf("Kanata process terminated with an error: %v\n", kanataProcessErr)
+			if runnerPipelineErr != nil {
+				fmt.Printf("Kanata runner terminated with an error: %v\n", runnerPipelineErr)
 				app.setStatus(i, statusCrashed)
 				app.setIcon(icons.Crash)
 			} else {

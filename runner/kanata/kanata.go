@@ -224,7 +224,10 @@ func (r *Kanata) SendClientMessage(msg tcp_client.ClientMessage) error {
 //
 // `hookName` - stringified hook type e.g. "pre-start".
 func runAllBlockingHooks(hooks []string, hookName string) error {
-	timeout := 3 * time.Second
+	timeout := 5 * time.Second
+	// We don't use ctx from outside, because we want to guarantee
+	// that the hooks finish normally in case of cancel from outside
+	// (e.g. when rapidly switching presets)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	wg := sync.WaitGroup{}
@@ -236,8 +239,8 @@ func runAllBlockingHooks(hooks []string, hookName string) error {
 		hook := hook // fix race condition
 		go func() {
 			defer wg.Done()
-			exe, args := parseCmd(hook)
-			cmd := cmd(ctx, exe, args...)
+			args := parseCmd(hook)
+			cmd := cmd(ctx, args[0], args[1:]...)
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
 			if err != nil {
@@ -246,7 +249,11 @@ func runAllBlockingHooks(hooks []string, hookName string) error {
 			}
 			err = cmd.Wait()
 			if err != nil {
-				errors[i] = fmt.Errorf("hook '%s' [%d] failed with an error: %v", hook, i, err)
+				if ctxErr := ctx.Err(); ctxErr != nil && ctxErr == context.DeadlineExceeded {
+					errors[i] = fmt.Errorf("hook '%s' [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)", hook, i, timeout)
+				} else {
+					errors[i] = fmt.Errorf("hook '%s' [%d] failed with an error: %v", hook, i, err)
+				}
 				return
 			}
 			fmt.Printf("%s [%d] exited OK\n", hookName, i)
@@ -276,8 +283,8 @@ func runAllAsyncHooks(ctx context.Context, hooks []string, hookName string, anyH
 		fmt.Printf("Running %s hook [%d] '%s'\n", hookName, i, hook)
 		i := i       // fix race condition
 		hook := hook // fix race condition
-		exe, args := parseCmd(hook)
-		cmd := cmd(ctx, exe, args...)
+		args := parseCmd(hook)
+		cmd := cmd(ctx, args[0], args[1:]...)
 		// TODO: capture stdout/stderr?
 		err := cmd.Start()
 		if err != nil {
@@ -288,7 +295,11 @@ func runAllAsyncHooks(ctx context.Context, hooks []string, hookName string, anyH
 			defer wg.Done()
 			err := cmd.Wait()
 			if err != nil {
-				fmt.Printf("Hook '%s' [%d] failed with an error: %v\n", hook, i, err)
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					fmt.Printf("hook '%s' [%d] was killed because of cancel signal: %v\n", hook, i, ctxErr)
+				} else {
+					fmt.Printf("Hook '%s' [%d] failed with an error: %v\n", hook, i, err)
+				}
 				if !anyHookErrored {
 					anyHookErrored = true
 					anyHookErroredCh <- err
@@ -305,15 +316,14 @@ func cmd(ctx context.Context, name string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.WaitDelay = 3 * time.Second
 	cmd.SysProcAttr = os_specific.ProcessAttr
+	// cmd.Stderr = os.Stderr
+	// cmd.Stdout = os.Stdout
+	// cmd.Stdin = os.Stdin
 	return cmd
 }
 
-// TODO: implement proper "" and ” parsing.
-func parseCmd(cmdWithArgs string) (string, []string) {
-	exe, argsStr, found := strings.Cut(cmdWithArgs, " ")
-	if !found {
-		return cmdWithArgs, nil
-	}
-	args := strings.Split(argsStr, "")
-	return exe, args
+// TODO: implement proper " and ' parsing.
+func parseCmd(cmdWithArgs string) []string {
+	args := strings.Split(cmdWithArgs, " ")
+	return args
 }
