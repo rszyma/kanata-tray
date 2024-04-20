@@ -5,35 +5,69 @@ on:
       - "v*.*.*"
 
 jobs:
-  release: 
+  release_linux_windows:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
-        
+          go-version: "1.21"
+
       - name: Install dependencies
         run: |
           sudo apt-get install libayatana-appindicator3-dev
 
       - name: Install just
         uses: taiki-e/install-action@just
-          
-      - name: Build
+
+      - name: Build for Linux and Windows
         run: |
           version=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           just build_release_linux $version
           just build_release_windows $version
-          
-      - name: Release 
-        uses: softprops/action-gh-release@v1 
-        with: 
-          draft: false 
-          prerelease: false 
+
+      - name: Upload Linux and Windows artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: linux-windows-artifacts
+          path: |
+            ./dist/kanata-tray.exe
+            ./dist/kanata-tray-linux
+
+  release_darwin:
+    needs: release_linux_windows
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Download Linux and Windows artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: linux-windows-artifacts
+          path: dist
+
+      - name: Build for darwin
+        run: |
+          version=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          just build_release_macos $version
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: false
+          prerelease: false
           files: |
             ./dist/kanata-tray.exe
-            ./dist/kanata-tray
+            ./dist/kanata-tray-linux
+            ./dist/kanata-tray-macos
             LICENSE
