@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
+	"slices"
 	"sync"
 	"time"
 
@@ -223,7 +223,7 @@ func (r *Kanata) SendClientMessage(msg tcp_client.ClientMessage) error {
 // Returns first encountered error within all hook errors.
 //
 // `hookName` - stringified hook type e.g. "pre-start".
-func runAllBlockingHooks(hooks []string, hookName string) error {
+func runAllBlockingHooks(hooks [][]string, hookName string) error {
 	timeout := 5 * time.Second
 	// We don't use ctx from outside, because we want to guarantee
 	// that the hooks finish normally in case of cancel from outside
@@ -235,12 +235,11 @@ func runAllBlockingHooks(hooks []string, hookName string) error {
 	var errors = make([]error, len(hooks))
 	for i, hook := range hooks {
 		fmt.Printf("Running %s hook [%d] '%s'\n", hookName, i, hook)
-		i := i       // fix race condition
-		hook := hook // fix race condition
+		i := i // fix race condition
+		hook := slices.Clone(hook)
 		go func() {
 			defer wg.Done()
-			args := parseCmd(hook)
-			cmd := cmd(ctx, args[0], args[1:]...)
+			cmd := cmd(ctx, hook[0], hook[1:]...)
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
 			if err != nil {
@@ -271,7 +270,7 @@ func runAllBlockingHooks(hooks []string, hookName string) error {
 // `hookName` - stringified hook type e.g. "pre-start".
 //
 // Returns an error if any error ocurred during startup of any hook.
-func runAllAsyncHooks(ctx context.Context, hooks []string, hookName string, anyHookErroredCh chan<- error, allHooksExitedCh chan<- struct{}) error {
+func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookName string, anyHookErroredCh chan<- error, allHooksExitedCh chan<- struct{}) error {
 	anyHookErrored := false
 	wg := sync.WaitGroup{}
 	wg.Add(len(hooks))
@@ -281,10 +280,9 @@ func runAllAsyncHooks(ctx context.Context, hooks []string, hookName string, anyH
 	}()
 	for i, hook := range hooks {
 		fmt.Printf("Running %s hook [%d] '%s'\n", hookName, i, hook)
-		i := i       // fix race condition
-		hook := hook // fix race condition
-		args := parseCmd(hook)
-		cmd := cmd(ctx, args[0], args[1:]...)
+		i := i                     // fix race condition
+		hook := slices.Clone(hook) // fix race condition
+		cmd := cmd(ctx, hook[0], hook[1:]...)
 		// TODO: capture stdout/stderr?
 		err := cmd.Start()
 		if err != nil {
@@ -320,10 +318,4 @@ func cmd(ctx context.Context, name string, args ...string) *exec.Cmd {
 	// cmd.Stdout = os.Stdout
 	// cmd.Stdin = os.Stdin
 	return cmd
-}
-
-// TODO: implement proper " and ' parsing.
-func parseCmd(cmdWithArgs string) []string {
-	args := strings.Split(cmdWithArgs, " ")
-	return args
 }

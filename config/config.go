@@ -13,6 +13,23 @@ import (
 	tomlu "github.com/pelletier/go-toml/v2/unstable"
 )
 
+var defaultCfg = `
+# See https://github.com/rszyma/kanata-tray for help with configuration.
+"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/v0.1.0/doc/config_schema.json"
+
+general.allow_concurrent_presets = false
+defaults.tcp_port = 5829
+
+[defaults.layer_icons]
+
+
+[presets.'Default Preset']
+kanata_executable = ''
+kanata_config = ''
+autorun = false
+
+`
+
 type Config struct {
 	PresetDefaults Preset
 	General        GeneralConfigOptions
@@ -37,6 +54,14 @@ type GeneralConfigOptions struct {
 	AllowConcurrentPresets bool
 }
 
+// Parsed hooks that contain list of args.
+type Hooks struct {
+	PreStart       [][]string
+	PostStart      [][]string
+	PostStartAsync [][]string
+	PostStop       [][]string
+}
+
 // =========
 // All golang toml parsers suck :/
 
@@ -52,14 +77,7 @@ type preset struct {
 	KanataConfig     *string           `toml:"kanata_config"`
 	TcpPort          *int              `toml:"tcp_port"`
 	LayerIcons       map[string]string `toml:"layer_icons"`
-	Hooks            *Hooks            `toml:"hooks"`
-}
-
-type Hooks struct {
-	PreStart       []string `toml:"pre-start"`
-	PostStart      []string `toml:"post-start"`
-	PostStartAsync []string `toml:"post-start-async"`
-	PostStop       []string `toml:"post-stop"`
+	Hooks            *hooks            `toml:"hooks"`
 }
 
 func (p *preset) applyDefaults(defaults *preset) {
@@ -85,7 +103,7 @@ func (p *preset) applyDefaults(defaults *preset) {
 	}
 }
 
-func (p *preset) intoExported() *Preset {
+func (p *preset) intoExported() (*Preset, error) {
 	result := &Preset{}
 	if p.Autorun != nil {
 		result.Autorun = *p.Autorun
@@ -103,13 +121,46 @@ func (p *preset) intoExported() *Preset {
 		result.LayerIcons = p.LayerIcons
 	}
 	if p.Hooks != nil {
-		result.Hooks = *p.Hooks
+		x, err := p.Hooks.intoExported()
+		if err != nil {
+			return nil, err
+		}
+		result.Hooks = *x
 	}
-	return result
+	return result, nil
 }
 
 type generalConfigOptions struct {
 	AllowConcurrentPresets *bool `toml:"allow_concurrent_presets"`
+}
+
+type hooks struct {
+	PreStart       []string `toml:"pre-start"`
+	PostStart      []string `toml:"post-start"`
+	PostStartAsync []string `toml:"post-start-async"`
+	PostStop       []string `toml:"post-stop"`
+}
+
+func (p *hooks) intoExported() (*Hooks, error) {
+	parseResults := make([][][]string, 0, 4)
+	hookLists := [][]string{p.PreStart, p.PostStart, p.PostStartAsync, p.PostStop}
+	for _, hooks := range hookLists {
+		parsedHooksOfOneKind := [][]string{}
+		for _, hook := range hooks {
+			args, err := parseCmd(hook)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse hook command '%s': %s", hook, err)
+			}
+			parsedHooksOfOneKind = append(parsedHooksOfOneKind, args)
+		}
+		parseResults = append(parseResults, parsedHooksOfOneKind)
+	}
+	return &Hooks{
+		PreStart:       parseResults[0],
+		PostStart:      parseResults[1],
+		PostStartAsync: parseResults[2],
+		PostStop:       parseResults[3],
+	}, nil
 }
 
 func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
@@ -157,8 +208,12 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 
 	defaults := cfg.PresetDefaults
 
+	defaultsExported, err := defaults.intoExported()
+	if err != nil {
+		return nil, err
+	}
 	var cfg2 *Config = &Config{
-		PresetDefaults: *defaults.intoExported(),
+		PresetDefaults: *defaultsExported,
 		General: GeneralConfigOptions{
 			AllowConcurrentPresets: *cfg.General.AllowConcurrentPresets,
 		},
@@ -171,7 +226,10 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 			panic("layer names should match")
 		}
 		v.applyDefaults(defaults)
-		exported := v.intoExported()
+		exported, err := v.intoExported()
+		if err != nil {
+			return nil, err
+		}
 		cfg2.Presets.Set(layerName, exported)
 	}
 
@@ -223,21 +281,6 @@ func keyAsStrings(it tomlu.Iterator) []string {
 	return parts
 }
 
-// var _ tomlu.Unmarshaler = (*OrderedMap[string, preset])(nil)
-
-// func (m *OrderedMap[string, preset]) UnmarshalTOML(node *tomlu.Node) error {
-// 	fmt.Println(node)
-// 	m = NewOrderedMap[string, preset]()
-// 	// m.Set("asdf", preset{})
-// 	for iter, ok := node.Key(), true; ok; ok = iter.Next() {
-// 		n := iter.Node()
-// 		fmt.Printf("n.Data: %v\n", n.Data)
-// 		// m.Set(k, v)
-// 	}
-
-// 	return nil
-// }
-
 type OrderedMap[K string, V fmt.GoStringer] struct {
 	*orderedmap.OrderedMap[K, V]
 }
@@ -276,19 +319,60 @@ func (m *OrderedMap[K, V]) GoString() string {
 	return builder.String()
 }
 
-var defaultCfg = `
-# See https://github.com/rszyma/kanata-tray for help with configuration.
-"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/v0.1.0/doc/config_schema.json"
+func parseCmd(cmdWithArgs string) ([]string, error) {
+	result := []string{}
+	level2_start_chars := []rune{'\'', '"'}
+	builder := strings.Builder{}
+	var level2_start rune = rune(0)
+	for _, char := range cmdWithArgs {
+		if level2_start != rune(0) {
+			if char == level2_start {
+				result = append(result, builder.String())
+				builder.Reset()
+				level2_start = rune(0)
+				continue
+			}
+			builder.WriteRune(char)
+			continue
+		}
+		// is on level 1
 
-general.allow_concurrent_presets = false
-defaults.tcp_port = 5829
+		if char == ' ' {
+			result = append(result, builder.String())
+			builder.Reset()
+			continue
+		}
 
-[defaults.layer_icons]
+		for _, c := range level2_start_chars {
+			if char == c {
+				result = append(result, builder.String())
+				builder.Reset()
+				level2_start = char
+				break
+			}
+		}
+		if level2_start != rune(0) {
+			continue
+		}
 
+		builder.WriteRune(char)
+	}
 
-[presets.'Default Preset']
-kanata_executable = ''
-kanata_config = ''
-autorun = false
+	switch level2_start {
+	case rune(0):
+		// all good
+	case '\'':
+		return nil, fmt.Errorf("unclosed single-quote character")
+	case '"':
+		return nil, fmt.Errorf("unclosed quote character")
+	default:
+		panic("unreachable")
+	}
 
-`
+	leftover := builder.String()
+	if len(leftover) != 0 {
+		result = append(result, leftover)
+	}
+
+	return result, nil
+}
