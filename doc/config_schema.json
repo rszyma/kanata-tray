@@ -27,6 +27,40 @@
                         "description": "A layer name to icon path mapping."
                     },
                     "description": "An map of layer names to icon paths."
+                },
+                "hooks": {
+                    "type": "object",
+                    "properties": {
+                        "pre-start": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Commands to run before running a preset. Will block kanata-tray until the hook process exits or 3 second timeout expires."
+                        },
+                        "post-start": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Commands to run after kanata in a given preset has fully started. Will block kanata-tray until the hook process exits or 3 second timeout expires."
+                        },
+                        "post-start-async": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Commands to run after kanata in a given preset has fully started. It can run indefinitely and will eventually be stopped when stopping preset."
+                        },
+                        "post-stop": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Commands to run after stopping a preset. Will block kanata-tray until the hook process exits or 3 second timeout expires."
+                        }
+                    },
+                    "description": "Allows running additional scripts/programs on specific events."
                 }
             },
             "additionalProperties": false,

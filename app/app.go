@@ -101,7 +101,7 @@ func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	kanataExecutable := t.presets[presetIndex].Preset.KanataExecutable
 	kanataConfig := t.presets[presetIndex].Preset.KanataConfig
 	ctx, cancel := context.WithCancel(context.Background())
-	err := runner.Run(ctx, t.presets[presetIndex].PresetName, kanataExecutable, kanataConfig, t.presets[presetIndex].Preset.TcpPort)
+	err := runner.Run(ctx, t.presets[presetIndex].PresetName, kanataExecutable, kanataConfig, t.presets[presetIndex].Preset.TcpPort, t.presets[presetIndex].Preset.Hooks)
 	if err != nil {
 		fmt.Printf("runner.Run failed with: %v\n", err)
 		t.setStatus(presetIndex, statusCrashed)
@@ -163,15 +163,15 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				}
 			}
 		case ret := <-retCh:
-			kanataProcessErr := ret.Item
+			runnerPipelineErr := ret.Item
 			i, err := app.indexFromPresetName(ret.PresetName)
 			if err != nil {
 				fmt.Printf("ERROR: Preset not found: %s\n", ret.PresetName)
 				continue
 			}
 			app.cancel(i)
-			if kanataProcessErr != nil {
-				fmt.Printf("Kanata process terminated with an error: %v\n", kanataProcessErr)
+			if runnerPipelineErr != nil {
+				fmt.Printf("Kanata runner terminated with an error: %v\n", runnerPipelineErr)
 				app.setStatus(i, statusCrashed)
 				app.setIcon(icons.Crash)
 			} else {
