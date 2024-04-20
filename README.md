@@ -40,6 +40,10 @@ kanata_executable = '~/bin/kanata' # if empty or omitted, system $PATH will be s
 kanata_config = '' # if empty or not omitted, kanata default config locations will be used.
 tcp_port = 5829 # if not specified, defaults to 5829
 
+[defaults.hooks]
+# Hooks allow running custom commands on specific events (e.g. starting preset).
+# Documentation: https://github.com/rszyma/kanata-tray/blob/main/doc/hooks.md
+
 [defaults.layer_icons]
 mouse = 'mouse.png' 
 qwerty = 'qwerty.ico'
@@ -73,8 +77,13 @@ When disabled, switching presets will stop currently running preset (if any).
 Disabled by default.
 
 Other notes:
-- You can use `~` in paths to substitute to your "home" directory.
+- You can use `~` in `kanata_config` and `kanata_executable` to substitute to your "home" directory.
 - On Windows: make sure to surround paths with single-quotes `'` instead of double-quotes, otherwise paths will not work (because `\` would be treated as escape character).
+
+### Hooks
+
+Hooks allow running custom commands on specific events (e.g. starting preset).
+[Hooks documentation](./doc/hooks.md).
 
 ### Config completion in editors
 
