@@ -3,6 +3,8 @@
 A simple wrapper for [kanata](https://github.com/jtroo/kanata) to control it from tray icon. 
 Works on Windows, Linux and macOS.
 
+### Note: there's now Windows-only native tray app support in kanata (https://github.com/jtroo/kanata/pull/990)
+
 ## Features
 
 - Tray icon with buttons for starting/stopping kanata
