@@ -41,7 +41,6 @@ type SystrayApp struct {
 func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool) *SystrayApp {
 
 	systray.SetIcon(icons.Default)
-	systray.SetTitle("kanata-tray")
 	systray.SetTooltip("kanata-tray")
 
 	t := &SystrayApp{
