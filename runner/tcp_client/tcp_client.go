@@ -108,8 +108,9 @@ func (c *ClientMessage) Bytes() []byte {
 // ==================
 
 type ServerMessage struct {
-	LayerChange *LayerChange `json:"LayerChange"`
-	LayerNames  *LayerNames  `json:"LayerNames"`
+	LayerChange      *LayerChange      `json:"LayerChange"`
+	LayerNames       *LayerNames       `json:"LayerNames"`
+	ConfigFileReload *ConfigFileReload `json:"ConfigFileReload"`
 }
 
 // {"LayerChange":{"new":"newly-changed-to-layer"}}
@@ -119,4 +120,8 @@ type LayerChange struct {
 
 type LayerNames struct {
 	Names []string `json:"names"`
+}
+
+type ConfigFileReload struct {
+	New string `json:"new"`
 }

@@ -10,3 +10,6 @@ var Crash []byte
 
 //go:embed pause.ico
 var Pause []byte
+
+//go:embed live-reload.ico
+var LiveReload []byte

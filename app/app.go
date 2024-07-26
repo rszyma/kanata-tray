@@ -23,7 +23,8 @@ type SystrayApp struct {
 	statuses          []KanataStatus
 	presetCancelFuncs []context.CancelFunc // cancel functions can be nil
 
-	layerIcons LayerIcons
+	currentIconData []byte
+	layerIcons      LayerIcons
 
 	statusClickedCh   chan int // the value sent in channel is an index of preset
 	openLogsClickedCh chan int // the value sent in channel is an index of preset
@@ -161,6 +162,12 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 					}
 				}
 			}
+			if event.Item.ConfigFileReload != nil {
+				prevIcon := app.currentIconData
+				app.setIcon(icons.LiveReload)
+				time.Sleep(150 * time.Millisecond)
+				app.setIcon(prevIcon)
+			}
 		case ret := <-retCh:
 			runnerPipelineErr := ret.Item
 			i, err := app.indexFromPresetName(ret.PresetName)
@@ -258,6 +265,7 @@ func (t *SystrayApp) cancel(presetIndex int) {
 }
 
 func (t *SystrayApp) setIcon(iconBytes []byte) {
+	t.currentIconData = iconBytes
 	systray.SetIcon(iconBytes)
 }
 
