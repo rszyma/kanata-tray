@@ -1,6 +1,6 @@
-# release folder
 dist
-
-# ignore config file and icons folder
-*.toml 
+*.toml
 icons
+.direnv
+kanata-tray
+.envrc
