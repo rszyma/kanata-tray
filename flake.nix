@@ -17,6 +17,7 @@
           pkg-config
           libayatana-appindicator
           gtk3
+          just
 
           # converting png -> ico
           #  convert input.png -define icon:auto-resize=48,32,16 output.ico
