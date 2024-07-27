@@ -32,7 +32,7 @@ type Runner struct {
 	runnersLimit         int
 }
 
-func NewRunner(ctx context.Context) *Runner {
+func NewRunner() *Runner {
 	activeInstancesLimit := 10
 	return &Runner{
 		retCh:                 make(chan ItemAndPresetName[error]),

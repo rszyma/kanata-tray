@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -42,40 +41,35 @@ func main() {
 	}
 }
 
-func mainImpl() error {
-	configFileName := "kanata-tray.toml"
-	var configFile string
-	var configFolder string
+const configFileName = "kanata-tray.toml"
 
-	// First try reading kanata-tray.toml from the folder where kanata-tray is located.
+func figureOutConfigDir() (configFolder string) {
+	if v := os.Getenv("KANATA_TRAY_CONFIG_DIR"); v != "" {
+		return v
+	}
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Println("Failed attempt to read kanata-tray.toml from kanata-tray folder", err)
-	}
-	localConfigFolder := filepath.Dir(exePath)
-	localConfigFile := filepath.Join(localConfigFolder, configFileName)
-	if _, err := os.Stat(localConfigFile); os.IsNotExist(err) {
-		configFolder = configdir.LocalConfig("kanata-tray")
-		configFile = filepath.Join(configFolder, configFileName)
-		// Create folder. No-op if exists.
-		err = configdir.MakePath(configFolder)
-		if err != nil {
-			return fmt.Errorf("failed to create folder: %v", err)
-		}
+		fmt.Printf("Failed to get kanata-tray executable path, can't check if kanata-tray.toml is there. Error: %v", err)
 	} else {
-		configFolder = localConfigFolder
-		configFile = localConfigFile
+		exeDir := filepath.Dir(exePath)
+		if _, err := os.Stat(filepath.Join(exeDir, configFileName)); !os.IsNotExist(err) {
+			return exeDir
+		}
 	}
+	return configdir.LocalConfig("kanata-tray")
+}
+
+func mainImpl() error {
+	configFolder := figureOutConfigDir()
 
 	fmt.Printf("kanata-tray config folder: %s\n", configFolder)
 
-	// Make sure "icons" folder exists too.
-	err = configdir.MakePath(filepath.Join(configFolder, "icons"))
+	err := os.MkdirAll(filepath.Join(configFolder, "icons"), os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create folder: %v", err)
 	}
 
-	cfg, err := config.ReadConfigOrCreateIfNotExist(configFile)
+	cfg, err := config.ReadConfigOrCreateIfNotExist(filepath.Join(configFolder, configFileName))
 	if err != nil {
 		return fmt.Errorf("loading config failed: %v", err)
 	}
@@ -85,10 +79,7 @@ func mainImpl() error {
 	}
 	layerIcons := app.ResolveIcons(configFolder, cfg)
 
-	// Actually we don't really use ctx right now to control kanata-tray termination
-	// so normal contex without cancel will do.
-	ctx := context.Background()
-	runner := runner.NewRunner(ctx)
+	runner := runner.NewRunner()
 
 	onReady := func() {
 		app := app.NewSystrayApp(menuTemplate, layerIcons, cfg.General.AllowConcurrentPresets)

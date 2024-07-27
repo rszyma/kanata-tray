@@ -24,8 +24,10 @@ The config folder location:
 - Windows `C:\Users\<YourUsername>\AppData\Roaming\kanata-tray`
 - macOS `$HOME/Library/Application\ Support/kanata-tray`
 
-Alternatively, you can place your config file in the same folder as kanata-tray executable, 
-and it will be have higher priority than the global config in user folder. 
+Alternatively, you can place your config file in the same folder as kanata-tray executable,
+and it will be have higher priority than the global config in user folder.
+
+Custom config directory location can be set with `KANATA_TRAY_CONFIG_DIR` environment variable.
 
 ### Examples
 
