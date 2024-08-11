@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/getlantern/systray"
+	"github.com/k0kubun/pp/v3"
+	"github.com/labstack/gommon/log"
 	"github.com/skratchdot/open-golang/open"
 
 	"github.com/rszyma/kanata-tray/icons"
@@ -82,20 +84,20 @@ func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowC
 
 func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	if !t.concurrentPresets && t.isAnyPresetRunning() {
-		fmt.Printf("Switching preset to '%s'\n", t.presets[presetIndex].PresetName)
+		log.Infof("Switching preset to '%s'", t.presets[presetIndex].PresetName)
 		for i := range t.presets {
 			t.cancel(i)
 			t.setStatus(i, statusIdle)
 		}
 		if t.scheduledPresetIndex != -1 {
-			fmt.Println("the previously scheduled preset was not ran!")
+			log.Warnf("the previously scheduled preset was not ran!")
 		}
 		t.scheduledPresetIndex = presetIndex
 		// Preset has been scheduled to run, and will actutally be run when the previous one exits.
 		return
 	}
 
-	fmt.Printf("Running preset '%s'\n", t.presets[presetIndex].PresetName)
+	log.Infof("Running preset '%s'", t.presets[presetIndex].PresetName)
 
 	t.setStatus(presetIndex, statusStarting)
 	kanataExecutable := t.presets[presetIndex].Preset.KanataExecutable
@@ -103,7 +105,7 @@ func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	ctx, cancel := context.WithCancel(context.Background())
 	err := runner.Run(ctx, t.presets[presetIndex].PresetName, kanataExecutable, kanataConfig, t.presets[presetIndex].Preset.TcpPort, t.presets[presetIndex].Preset.Hooks)
 	if err != nil {
-		fmt.Printf("runner.Run failed with: %v\n", err)
+		log.Errorf("runner.Run failed with: %v", err)
 		t.setStatus(presetIndex, statusCrashed)
 		cancel()
 		return
@@ -124,7 +126,7 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				if !autoranOnePreset {
 					autoranOnePreset = true
 				} else {
-					fmt.Println("WARNING: more than 1 preset has autorun enabled, but " +
+					log.Warnf("more than 1 preset has autorun enabled, but " +
 						"can't run them all, because `allow_concurrent_presets` is not enabled.")
 					break
 				}
@@ -139,6 +141,8 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 	for {
 		select {
 		case event := <-serverMessageCh:
+			log.Debugf("Received an event from kanata (preset=%s): %v, ", event.PresetName, pp.Sprint(event.Item))
+
 			// fmt.Printf("Received an event from kanata: %v\n", pp.Sprint(event))
 			if event.Item.LayerChange != nil {
 				icon := app.layerIcons.IconForLayerName(event.PresetName, event.Item.LayerChange.NewLayer)
@@ -158,7 +162,7 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 						}
 					}
 					if !found {
-						fmt.Printf("Layer '%s' is mapped to an icon, but doesn't exist in the loaded kanata config\n", mappedLayerName)
+						log.Warnf("Layer '%s' is mapped to an icon, but doesn't exist in the loaded kanata config", mappedLayerName)
 					}
 				}
 			}
@@ -172,16 +176,16 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 			runnerPipelineErr := ret.Item
 			i, err := app.indexFromPresetName(ret.PresetName)
 			if err != nil {
-				fmt.Printf("ERROR: Preset not found: %s\n", ret.PresetName)
+				log.Errorf("Preset not found: %s", ret.PresetName)
 				continue
 			}
 			app.cancel(i)
 			if runnerPipelineErr != nil {
-				fmt.Printf("Kanata runner terminated with an error: %v\n", runnerPipelineErr)
+				log.Errorf("Kanata runner terminated with an error: %v", runnerPipelineErr)
 				app.setStatus(i, statusCrashed)
 				app.setIcon(icons.Crash)
 			} else {
-				fmt.Println("Previous kanata process terminated successfully")
+				log.Infof("Previous kanata process terminated successfully")
 				app.setStatus(i, statusIdle)
 				if app.isAnyPresetRunning() {
 					app.setIcon(icons.Default)
@@ -209,15 +213,15 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 			presetName := app.presets[i].PresetName
 			logFile, err := runner.LogFile(presetName)
 			if err != nil {
-				fmt.Printf("Can't open log file for preset '%s': %v\n", presetName, err)
+				log.Warnf("Can't open log file for preset '%s': %v", presetName, err)
 			} else {
-				fmt.Printf("Opening log file for preset '%s': '%s'\n", presetName, logFile)
+				log.Debugf("Opening log file for preset '%s': '%s'", presetName, logFile)
 				open.Start(logFile)
 			}
 		case <-app.mOptions.ClickedCh:
 			open.Start(configFolder)
 		case <-app.mQuit.ClickedCh:
-			fmt.Println("Exiting...")
+			log.Print("Exiting...")
 			for _, cancel := range app.presetCancelFuncs {
 				if cancel != nil {
 					cancel()

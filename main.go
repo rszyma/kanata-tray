@@ -9,6 +9,7 @@ import (
 
 	"github.com/getlantern/systray"
 	"github.com/kirsle/configdir"
+	"github.com/labstack/gommon/log"
 
 	"github.com/rszyma/kanata-tray/app"
 	"github.com/rszyma/kanata-tray/config"
@@ -21,22 +22,33 @@ var (
 	buildDate    string
 )
 
-var version = flag.Bool("version", false, "Print the version and exit")
+var (
+	logLevel = flag.Uint("log-level", uint(log.INFO), "Set log level for kanata-tray (1-debug, 2-info, 3-warn) (note: doesn't affect kanata logging level)")
+	version  = flag.Bool("version", false, "Print the version and exit")
+)
 
 func main() {
 	flag.Parse()
 	if *version {
-		fmt.Printf("kanata-tray %s\n", buildVersion)
-		fmt.Printf("Commit Hash: %s\n", buildHash)
-		fmt.Printf("Build Date: %s\n", buildDate)
-		fmt.Printf("OS: %s\n", runtime.GOOS)
-		fmt.Printf("Arch: %s\n", runtime.GOARCH)
+		log.Printf("kanata-tray %s", buildVersion)
+		log.Printf("Commit Hash: %s", buildHash)
+		log.Printf("Build Date: %s", buildDate)
+		log.Printf("OS: %s", runtime.GOOS)
+		log.Printf("Arch: %s", runtime.GOARCH)
 		os.Exit(1)
+	}
+
+	log.SetLevel(log.Lvl(*logLevel))
+	log.SetOutput(os.Stderr)
+	if int(*logLevel) <= int(log.DEBUG) {
+		log.SetHeader(`${time_rfc3339_nano} ${level} ${short_file}:${line}`)
+	} else {
+		log.SetHeader(`${time_rfc3339_nano} ${level}`)
 	}
 
 	err := mainImpl()
 	if err != nil {
-		fmt.Printf("kanata-tray exited with an error: %v\n", err)
+		log.Errorf("kanata-tray exited with an error: %v", err)
 		os.Exit(1)
 	}
 }
@@ -49,7 +61,7 @@ func figureOutConfigDir() (configFolder string) {
 	}
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Printf("Failed to get kanata-tray executable path, can't check if kanata-tray.toml is there. Error: %v", err)
+		log.Errorf("Failed to get kanata-tray executable path, can't check if kanata-tray.toml is there. Error: %v", err)
 	} else {
 		exeDir := filepath.Dir(exePath)
 		if _, err := os.Stat(filepath.Join(exeDir, configFileName)); !os.IsNotExist(err) {
@@ -62,7 +74,7 @@ func figureOutConfigDir() (configFolder string) {
 func mainImpl() error {
 	configFolder := figureOutConfigDir()
 
-	fmt.Printf("kanata-tray config folder: %s\n", configFolder)
+	log.Infof("kanata-tray config folder: %s", configFolder)
 
 	err := os.MkdirAll(filepath.Join(configFolder, "icons"), os.ModePerm)
 	if err != nil {
@@ -87,7 +99,7 @@ func mainImpl() error {
 	}
 
 	onExit := func() {
-		fmt.Printf("Exiting")
+		log.Printf("Exiting")
 	}
 
 	systray.Run(onReady, onExit)

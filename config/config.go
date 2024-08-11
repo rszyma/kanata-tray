@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/labstack/gommon/log"
+
 	"github.com/elliotchance/orderedmap/v2"
 	"github.com/k0kubun/pp/v3"
 	"github.com/kr/pretty"
@@ -14,7 +16,7 @@ import (
 )
 
 var defaultCfg = `
-# For help with configuration see https://github.com/rszyma/kanata-tray/blob/main/README.md 
+# For help with configuration see https://github.com/rszyma/kanata-tray/blob/main/README.md
 "$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/v0.1.0/doc/config_schema.json"
 
 general.allow_concurrent_presets = false
@@ -185,7 +187,7 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 
 	// Does the file not exist?
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
-		fmt.Printf("Config file doesn't exist. Creating default config. Path: '%s'\n", configFilePath)
+		log.Infof("Config file doesn't exist. Creating default config. Path: '%s'", configFilePath)
 		os.WriteFile(configFilePath, []byte(defaultCfg), os.FileMode(0600))
 	} else {
 		// Load the existing file.

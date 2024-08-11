@@ -9,6 +9,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/labstack/gommon/log"
 )
 
 type KanataTcpClient struct {
@@ -43,7 +45,7 @@ func (c *KanataTcpClient) Connect(ctx context.Context, port int) error {
 		c.mu.Unlock()
 		return err
 	}
-	fmt.Printf("Connected to kanata via TCP (%s)\n", c.conn.LocalAddr().String())
+	log.Infof("Connected to kanata via TCP (%s)", c.conn.LocalAddr().String())
 	ctxSend, cancelSenderLoop := context.WithCancel(ctx)
 	go func() {
 		for {
@@ -54,11 +56,10 @@ func (c *KanataTcpClient) Connect(ctx context.Context, port int) error {
 				msgBytes := msg.Bytes()
 				_, err := c.conn.Write(msgBytes)
 				if err != nil {
-					fmt.Printf("tcp client: failed to send message: %v\n", err)
+					log.Errorf("tcp client: failed to send message: %v", err)
+				} else {
+					log.Debugf("msg sent: %s", string(msgBytes))
 				}
-				// else {
-				// fmt.Printf("msg sent: %s\n", string(msgBytes))
-				// }
 			}
 		}
 	}()
@@ -70,20 +71,20 @@ func (c *KanataTcpClient) Connect(ctx context.Context, port int) error {
 			var msgBytes = scanner.Bytes()
 			// do not change the following condition (because of cross-version compability)
 			if bytes.Contains(msgBytes, []byte("you sent an invalid message")) {
-				fmt.Printf("Kanata disconnected us because we supposedly sent an 'invalid message' (kanata version is too old?)\n")
+				log.Errorf("Kanata disconnected us because we supposedly sent an 'invalid message' (kanata version is too old?)")
 				c.Reconnect <- struct{}{}
 				return
 			}
 			var msg ServerMessage
 			err := json.Unmarshal(msgBytes, &msg)
 			if err != nil {
-				fmt.Printf("tcp client: failed to unmarshal message '%s': %v\n", string(msgBytes), err)
+				log.Errorf("tcp client: failed to unmarshal message '%s': %v", string(msgBytes), err)
 				continue
 			}
 			c.serverMessageCh <- msg
 		}
 		if err := scanner.Err(); err != nil {
-			fmt.Printf("tcp client: failed to read stream: %v\n", err)
+			log.Errorf("tcp client: failed to read stream: %v", err)
 		}
 	}()
 	return nil

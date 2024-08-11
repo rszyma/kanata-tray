@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/labstack/gommon/log"
+
 	"github.com/rszyma/kanata-tray/config"
 	"github.com/rszyma/kanata-tray/os_specific"
 	"github.com/rszyma/kanata-tray/runner/tcp_client"
@@ -86,7 +88,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			return
 		}
 
-		fmt.Printf("Running command: %s\n", r.cmd.String())
+		log.Infof("Running command: %s", r.cmd.String())
 
 		err = r.cmd.Start()
 		if err != nil {
@@ -94,7 +96,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			return
 		}
 
-		fmt.Printf("Started kanata (pid=%d)\n", r.cmd.Process.Pid)
+		log.Infof("Started kanata (pid=%d)", r.cmd.Process.Pid)
 
 		// Need to wait until kanata boot up and setups the TCP server.
 		// 2000 ms is a default start delay in kanata.
@@ -118,7 +120,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			case <-selfCtx.Done():
 				return
 			case err := <-anyPostStartAsyncHookErroredCh:
-				fmt.Println("An async hook errored, stopping preset.")
+				log.Errorf("An async hook errored, stopping preset.")
 				selfCancel(err)
 			}
 		}()
@@ -134,7 +136,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 				case <-r.tcpClient.Reconnect:
 					err := r.tcpClient.Connect(selfCtx, tcpPort)
 					if err != nil {
-						fmt.Printf("Failed to connect to kanata via TCP: %v\n", err)
+						log.Errorf("Failed to connect to kanata via TCP: %v", err)
 					}
 				}
 			}
@@ -145,16 +147,16 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		// https://github.com/jtroo/kanata/commit/d66c3c77bcb3acbf58188272177d64bed4130b6e
 		err = r.SendClientMessage(tcp_client.ClientMessage{RequestLayerNames: struct{}{}})
 		if err != nil {
-			fmt.Printf("Failed to send ClientMessage: %v\n", err)
+			log.Errorf("Failed to send ClientMessage: %v", err)
 			// this is non-critical, so we continue
 		}
 
 		cmdErr := r.cmd.Wait() // block until kanata exits
 		r.cmd = nil
 
-		fmt.Println("Waiting for all post-start-async hooks to exit")
+		log.Infof("Waiting for all post-start-async hooks to exit")
 		<-allPostStartAsyncHooksExitedCh
-		fmt.Println("All post-start-async hooks exited")
+		log.Infof("All post-start-async hooks exited")
 
 		err = runAllBlockingHooks(hooks.PostStop, "post-stop")
 		if err != nil {
@@ -234,7 +236,7 @@ func runAllBlockingHooks(hooks [][]string, hookName string) error {
 	wg.Add(len(hooks))
 	var errors = make([]error, len(hooks))
 	for i, hook := range hooks {
-		fmt.Printf("Running %s hook [%d] '%s'\n", hookName, i, hook)
+		log.Infof("Running %s hook [%d] '%s'", hookName, i, hook)
 		i := i // fix race condition
 		hook := slices.Clone(hook)
 		go func() {
@@ -255,7 +257,7 @@ func runAllBlockingHooks(hooks [][]string, hookName string) error {
 				}
 				return
 			}
-			fmt.Printf("%s [%d] exited OK\n", hookName, i)
+			log.Infof("%s [%d] exited OK", hookName, i)
 		}()
 	}
 	wg.Wait()
@@ -279,14 +281,14 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookName string, an
 		allHooksExitedCh <- struct{}{}
 	}()
 	for i, hook := range hooks {
-		fmt.Printf("Running %s hook [%d] '%s'\n", hookName, i, hook)
+		log.Infof("Running %s hook [%d] '%s'", hookName, i, hook)
 		i := i                     // fix race condition
 		hook := slices.Clone(hook) // fix race condition
 		cmd := cmd(ctx, hook[0], hook[1:]...)
 		// TODO: capture stdout/stderr?
 		err := cmd.Start()
 		if err != nil {
-			fmt.Printf("Failed to run %s hook [%d]: %v\n", hookName, i, err)
+			log.Errorf("Failed to run %s hook [%d]: %v", hookName, i, err)
 			return err
 		}
 		go func() {
@@ -294,9 +296,9 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookName string, an
 			err := cmd.Wait()
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
-					fmt.Printf("hook '%s' [%d] was killed because of cancel signal: %v\n", hook, i, ctxErr)
+					log.Warnf("hook '%s' [%d] was killed because of cancel signal: %v", hook, i, ctxErr)
 				} else {
-					fmt.Printf("Hook '%s' [%d] failed with an error: %v\n", hook, i, err)
+					log.Errorf("Hook '%s' [%d] failed with an error: %v", hook, i, err)
 				}
 				if !anyHookErrored {
 					anyHookErrored = true
@@ -304,7 +306,7 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookName string, an
 				}
 				return
 			}
-			fmt.Printf("%s [%d] exited OK\n", hookName, i)
+			log.Infof("%s [%d] exited OK", hookName, i)
 		}()
 	}
 	return nil

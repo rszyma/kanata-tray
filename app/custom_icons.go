@@ -1,9 +1,10 @@
 package app
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/labstack/gommon/log"
 
 	"github.com/rszyma/kanata-tray/config"
 )
@@ -27,24 +28,24 @@ func (c LayerIcons) IconForLayerName(presetName string, layerName string) []byte
 	preset, ok := c.presetIcons[presetName]
 	if ok {
 		if layerIcon, ok := preset.layerIcons[layerName]; ok {
-			fmt.Printf("Setting icon: preset:%s, layer:%s\n", presetName, layerName)
+			log.Infof("Setting icon: preset:%s, layer:%s", presetName, layerName)
 			return layerIcon
 		}
 	}
 	// global
 	layerIcon, ok := c.defaultIcons.layerIcons[layerName]
 	if ok {
-		fmt.Printf("Setting icon: preset:*, layer:%s\n", layerName)
+		log.Infof("Setting icon: preset:*, layer:%s", layerName)
 		return layerIcon
 	}
 	// preset_wildcard
 	if preset != nil && preset.wildcardIcon != nil {
-		fmt.Printf("Setting icon: preset:%s, layer:*\n", presetName)
+		log.Infof("Setting icon: preset:%s, layer:*", presetName)
 		return preset.wildcardIcon
 	}
 	// global_wildcard
 	if c.defaultIcons.wildcardIcon != nil {
-		fmt.Printf("Setting icon: preset:*, layer:*\n")
+		log.Infof("Setting icon: preset:*, layer:*")
 		return c.defaultIcons.wildcardIcon
 	}
 	// default
@@ -79,7 +80,7 @@ func ResolveIcons(configFolder string, cfg *config.Config) LayerIcons {
 	for layerName, unvalidatedIconPath := range cfg.PresetDefaults.LayerIcons {
 		data, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
 		if err != nil {
-			fmt.Printf("defaults - custom icon file can't be read: %v\n", err)
+			log.Warnf("defaults - custom icon file can't be read: %v", err)
 		} else if layerName == "*" {
 			icons.defaultIcons.wildcardIcon = data
 		} else {
@@ -93,7 +94,7 @@ func ResolveIcons(configFolder string, cfg *config.Config) LayerIcons {
 		for layerName, unvalidatedIconPath := range preset.LayerIcons {
 			data, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
 			if err != nil {
-				fmt.Printf("Preset '%s' - custom icon file can't be read: %v\n", presetName, err)
+				log.Warnf("Preset '%s' - custom icon file can't be read: %v", presetName, err)
 			} else if layerName == "*" {
 				icons.presetIcons[presetName].wildcardIcon = data
 			} else {
