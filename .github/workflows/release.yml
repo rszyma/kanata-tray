@@ -51,7 +51,7 @@ jobs:
         uses: taiki-e/install-action@just
 
       - name: Download Linux and Windows artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: linux-windows-artifacts
           path: dist
