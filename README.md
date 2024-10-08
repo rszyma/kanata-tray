@@ -139,6 +139,6 @@ sudo zypper in libayatana-appindicator3-devel
 ## Installation
 
 Prebuild binaries for Windows and Linux: [releases page](https://github.com/rszyma/kanata-tray/releases/latest)
- - **Optional**: Verify Integrity of downloaded file with its respective [checksum](CHECKSUM.md)
+ - **Optional**: Verify Integrity of downloaded file with its respective [checksum](CHECKSUMS.md)
 
 To build from source see recipes in [justfile](./justfile).
