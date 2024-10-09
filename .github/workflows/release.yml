@@ -61,6 +61,11 @@ jobs:
           version=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           just build_release_macos $version
 
+      - name: Add Checksums
+        run: |
+          cd ./dist
+          for file in kanata-tray*; do shasum -a 256 "$file"; done > sha256sums
+
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
@@ -71,3 +76,4 @@ jobs:
             ./dist/kanata-tray-linux
             ./dist/kanata-tray-macos
             LICENSE
+            ./dist/sha256sums
