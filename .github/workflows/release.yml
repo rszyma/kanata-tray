@@ -64,7 +64,7 @@ jobs:
       - name: Add Checksums
         run: |
           cd ./dist
-          for file in *; do shasum -a 256 "$file"; done > sha256sums
+          for file in kanata-tray*; do shasum -a 256 "$file"; done > sha256sums
 
       - name: Release
         uses: softprops/action-gh-release@v1
