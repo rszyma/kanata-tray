@@ -63,7 +63,7 @@ jobs:
 
       - name: Add Checksums
         run: |
-          for file in ./dist; do sha256sum "$file"; done > ./dist/sha256sums
+          for file in ./dist/*; do shasum -a 256 "$file"; done > ./dist/sha256sums
 
       - name: Release
         uses: softprops/action-gh-release@v1
