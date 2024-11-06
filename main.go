@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -38,14 +39,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.SetLevel(log.Lvl(*logLevel))
-	log.SetOutput(os.Stderr)
-	if int(*logLevel) <= int(log.DEBUG) {
-		log.SetHeader(`${time_rfc3339_nano} ${level} ${short_file}:${line}`)
-	} else {
-		log.SetHeader(`${time_rfc3339_nano} ${level}`)
-	}
-
 	err := mainImpl()
 	if err != nil {
 		log.Errorf("kanata-tray exited with an error: %v", err)
@@ -72,11 +65,43 @@ func figureOutConfigDir() (configFolder string) {
 }
 
 func mainImpl() error {
+	log.SetLevel(log.Lvl(*logLevel))
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to determine kanata-tray path: %v", err)
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return fmt.Errorf("failed to eval symlinks: %v", err)
+	}
+	exeDir := filepath.Dir(exePath)
+	const logFilename string = "kanata_tray_lastrun.log"
+	logFilepath := filepath.Join(exeDir, logFilename)
+	logFile, err := os.Create(logFilepath)
+	if err != nil {
+		return fmt.Errorf("failed to create %s file: %v", logFilename, err)
+	}
+	// Check if stderr is available. Specifically it won't be, when running
+	// Windows binary compiled with -H=windowsgui ldflag.
+	_, err = os.Stderr.Stat()
+	if err != nil {
+		log.SetOutput(logFile)
+	} else {
+		log.SetOutput(io.MultiWriter(logFile, os.Stderr))
+	}
+
+	if int(*logLevel) <= int(log.DEBUG) {
+		log.SetHeader(`${time_rfc3339_nano} ${level} ${short_file}:${line}`)
+	} else {
+		log.SetHeader(`${time_rfc3339_nano} ${level}`)
+	}
+
 	configFolder := figureOutConfigDir()
 
 	log.Infof("kanata-tray config folder: %s", configFolder)
 
-	err := os.MkdirAll(filepath.Join(configFolder, "icons"), os.ModePerm)
+	err = os.MkdirAll(filepath.Join(configFolder, "icons"), os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create folder: %v", err)
 	}
@@ -94,7 +119,7 @@ func mainImpl() error {
 	runner := runner.NewRunner()
 
 	onReady := func() {
-		app := app.NewSystrayApp(menuTemplate, layerIcons, cfg.General.AllowConcurrentPresets)
+		app := app.NewSystrayApp(menuTemplate, layerIcons, cfg.General.AllowConcurrentPresets, logFilepath)
 		go app.StartProcessingLoop(runner, configFolder)
 	}
 
