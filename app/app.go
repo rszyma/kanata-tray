@@ -15,6 +15,8 @@ import (
 )
 
 type SystrayApp struct {
+	logFilepath string
+
 	concurrentPresets bool
 
 	// Used when `concurrentPresets` is disabled.
@@ -37,16 +39,18 @@ type SystrayApp struct {
 	mPresetLogs     []*systray.MenuItem
 	mPresetStatuses []*systray.MenuItem
 
-	mOptions *systray.MenuItem
-	mQuit    *systray.MenuItem
+	mOptions  *systray.MenuItem
+	mShowLogs *systray.MenuItem
+	mQuit     *systray.MenuItem
 }
 
-func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool) *SystrayApp {
+func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool, logFilepath string) *SystrayApp {
 
 	systray.SetIcon(icons.Default)
 	systray.SetTooltip("kanata-tray")
 
 	t := &SystrayApp{
+		logFilepath:          logFilepath,
 		presets:              menuTemplate,
 		scheduledPresetIndex: -1,
 		layerIcons:           layerIcons,
@@ -66,14 +70,14 @@ func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowC
 
 		t.presetCancelFuncs = append(t.presetCancelFuncs, nil)
 
-		openLogsItem := menuItem.AddSubMenuItem("Open Logs", "Open Logs")
-		// openLogsItem.Disable()
+		openLogsItem := menuItem.AddSubMenuItem("Open kanata logs", "Open kanata log file")
 		t.mPresetLogs = append(t.mPresetLogs, openLogsItem)
 	}
 
 	systray.AddSeparator()
 
 	t.mOptions = systray.AddMenuItem("Configure", "Reveals kanata-tray config file")
+	t.mShowLogs = systray.AddMenuItem("Open logs", "Reveals kanata-tray log file")
 	t.mQuit = systray.AddMenuItem("Exit tray", "Closes kanata (if running) and exits the tray")
 
 	t.statusClickedCh = multipleMenuItemsClickListener(t.mPresetStatuses)
@@ -220,6 +224,8 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 			}
 		case <-app.mOptions.ClickedCh:
 			open.Start(configFolder)
+		case <-app.mShowLogs.ClickedCh:
+			open.Start(app.logFilepath)
 		case <-app.mQuit.ClickedCh:
 			log.Print("Exiting...")
 			for _, cancel := range app.presetCancelFuncs {

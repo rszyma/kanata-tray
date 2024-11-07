@@ -239,7 +239,7 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 		cfg2.Presets.Set(layerName, exported)
 	}
 
-	pretty.Println("loaded config:", cfg2)
+	log.Debugf("loaded config: %s", pretty.Sprint(cfg2))
 	return cfg2, nil
 }
 
