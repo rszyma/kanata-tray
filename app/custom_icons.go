@@ -91,14 +91,22 @@ func ResolveIcons(configFolder string, cfg *config.Config) LayerIcons {
 	for m := cfg.Presets.Front(); m != nil; m = m.Next() {
 		presetName := m.Key
 		preset := m.Value
+		presetIcons := icons.presetIcons[presetName]
+		if presetIcons == nil {
+			presetIcons = &LayerIconsForPreset{
+				layerIcons:   make(map[string][]byte),
+				wildcardIcon: nil,
+			}
+			icons.presetIcons[presetName] = presetIcons
+		}
 		for layerName, unvalidatedIconPath := range preset.LayerIcons {
 			data, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
 			if err != nil {
 				log.Warnf("Preset '%s' - custom icon file can't be read: %v", presetName, err)
 			} else if layerName == "*" {
-				icons.presetIcons[presetName].wildcardIcon = data
+				presetIcons.wildcardIcon = data
 			} else {
-				icons.presetIcons[presetName].layerIcons[layerName] = data
+				presetIcons.layerIcons[layerName] = data
 			}
 		}
 	}
