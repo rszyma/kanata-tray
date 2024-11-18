@@ -17,7 +17,7 @@ import (
 
 var defaultCfg = `
 # For help with configuration see https://github.com/rszyma/kanata-tray/blob/main/README.md
-"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/v0.1.0/doc/config_schema.json"
+"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json"
 
 general.allow_concurrent_presets = false
 defaults.tcp_port = 5829
