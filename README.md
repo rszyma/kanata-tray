@@ -107,6 +107,12 @@ Minimal supported version of kanata is `v1.6.0`.
 
 More specifically, builds after commit [010338b](https://github.com/jtroo/kanata/commit/010338b14d0020098b9263a615ef2152c249d666) (because it fixed an issue with TCP server)
 
+## Troubleshooting
+
+Log file - By default kanata-tray will try to write a log file named `kanata_tray_lastrun.log` in the same directory as itself. If it causes problems e.g. because of the location is read-only, the log directory can be changed by setting new path in `KANATA_TRAY_LOG_DIR` environment variable.
+
+Debug logs - more verbose kanata-tray output, debug logging can be enabled with `--log-level=1` flag. You can use it to see loaded config struct or raw tcp messages from kanata.
+
 ## Linux Dependencies
 
 For Linux, make sure to install required packages first:

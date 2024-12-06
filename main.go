@@ -28,6 +28,11 @@ var (
 	version  = flag.Bool("version", false, "Print the version and exit")
 )
 
+const (
+	configFileName = "kanata-tray.toml"
+	logFilename    = "kanata_tray_lastrun.log"
+)
+
 func main() {
 	flag.Parse()
 	if *version {
@@ -46,13 +51,11 @@ func main() {
 	}
 }
 
-const configFileName = "kanata-tray.toml"
-
 func figureOutConfigDir() (configFolder string) {
 	if v := os.Getenv("KANATA_TRAY_CONFIG_DIR"); v != "" {
 		return v
 	}
-	exePath, err := os.Executable()
+	exePath, err := exePath()
 	if err != nil {
 		log.Errorf("Failed to get kanata-tray executable path, can't check if kanata-tray.toml is there. Error: %v", err)
 	} else {
@@ -64,20 +67,44 @@ func figureOutConfigDir() (configFolder string) {
 	return configdir.LocalConfig("kanata-tray")
 }
 
-func mainImpl() error {
-	log.SetLevel(log.Lvl(*logLevel))
-
+func exePath() (string, error) {
 	exePath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("failed to determine kanata-tray path: %v", err)
+		return "", fmt.Errorf("os.Executable: %v", err)
 	}
 	exePath, err = filepath.EvalSymlinks(exePath)
 	if err != nil {
-		return fmt.Errorf("failed to eval symlinks: %v", err)
+		return "", fmt.Errorf("filepath.EvalSymlinks: %v", err)
 	}
-	exeDir := filepath.Dir(exePath)
-	const logFilename string = "kanata_tray_lastrun.log"
-	logFilepath := filepath.Join(exeDir, logFilename)
+	return exePath, nil
+}
+
+func mainImpl() error {
+	log.SetLevel(log.Lvl(*logLevel))
+
+	if int(*logLevel) <= int(log.DEBUG) {
+		log.SetHeader(`${time_rfc3339_nano} ${level} ${short_file}:${line}`)
+	} else {
+		log.SetHeader(`${time_rfc3339_nano} ${level}`)
+	}
+
+	var logDir string
+	if v := os.Getenv("KANATA_TRAY_LOG_DIR"); v != "" {
+		var err error
+		logDir, err = filepath.EvalSymlinks(v)
+		if err != nil {
+			return fmt.Errorf("filepath.EvalSymlinks on KANATA_TRAY_LOG_DIR failed: %v", err)
+		}
+	} else {
+		exePath, err := exePath()
+		if err != nil {
+			return fmt.Errorf("failed to determine kanata-tray executable path: %v", err)
+		}
+		exeDirPath := filepath.Dir(exePath)
+		logDir = exeDirPath
+	}
+
+	logFilepath := filepath.Join(logDir, logFilename)
 	logFile, err := os.Create(logFilepath)
 	if err != nil {
 		return fmt.Errorf("failed to create %s file: %v", logFilename, err)
@@ -89,12 +116,6 @@ func mainImpl() error {
 		log.SetOutput(logFile)
 	} else {
 		log.SetOutput(io.MultiWriter(logFile, os.Stderr))
-	}
-
-	if int(*logLevel) <= int(log.DEBUG) {
-		log.SetHeader(`${time_rfc3339_nano} ${level} ${short_file}:${line}`)
-	} else {
-		log.SetHeader(`${time_rfc3339_nano} ${level}`)
 	}
 
 	configFolder := figureOutConfigDir()
