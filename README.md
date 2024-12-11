@@ -101,6 +101,12 @@ In VSCode to get editor support for your kanata-tray config, install [Even Bette
 "$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json"
 ```
 
+### Logging
+
+By default `kanata-tray` opens a log in the same directory as the executable.
+
+You can change it by setting the `KANATA_TRAY_LOG_DIR` environment variable.
+
 ## Supported Kanata Versions
 
 Minimal supported version of kanata is `v1.6.0`.
