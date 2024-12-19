@@ -45,7 +45,6 @@ type SystrayApp struct {
 }
 
 func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool, logFilepath string) *SystrayApp {
-
 	systray.SetIcon(icons.Default)
 	systray.SetTooltip("kanata-tray")
 
@@ -104,10 +103,16 @@ func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	log.Infof("Running preset '%s'", t.presets[presetIndex].PresetName)
 
 	t.setStatus(presetIndex, statusStarting)
-	kanataExecutable := t.presets[presetIndex].Preset.KanataExecutable
-	kanataConfig := t.presets[presetIndex].Preset.KanataConfig
 	ctx, cancel := context.WithCancel(context.Background())
-	err := runner.Run(ctx, t.presets[presetIndex].PresetName, kanataExecutable, kanataConfig, t.presets[presetIndex].Preset.TcpPort, t.presets[presetIndex].Preset.Hooks)
+	err := runner.Run(
+		ctx,
+		t.presets[presetIndex].PresetName,
+		t.presets[presetIndex].Preset.KanataExecutable,
+		t.presets[presetIndex].Preset.KanataConfig,
+		t.presets[presetIndex].Preset.TcpPort,
+		t.presets[presetIndex].Preset.Hooks,
+		t.presets[presetIndex].Preset.ExtraArgs,
+	)
 	if err != nil {
 		log.Errorf("runner.Run failed with: %v", err)
 		t.setStatus(presetIndex, statusCrashed)
@@ -284,7 +289,7 @@ func (t *SystrayApp) setIcon(iconBytes []byte) {
 func multipleMenuItemsClickListener(menuItems []*systray.MenuItem) chan int {
 	ch := make(chan int)
 	for i := range menuItems {
-		var i = i
+		i := i
 		go func() {
 			for range menuItems[i].ClickedCh {
 				ch <- i
