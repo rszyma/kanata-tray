@@ -67,7 +67,7 @@
                     "items": {
                         "type": "string"
                     },
-                    "description": "You may pass extra arguments to kanata such as --nodelay, additional --cfg params, etc."
+                    "description": "You may pass extra arguments to kanata except for the port (use tcp_port instead), such as --nodelay, additional --cfg params, etc."
                 }
             },
             "additionalProperties": false,

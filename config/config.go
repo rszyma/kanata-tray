@@ -84,7 +84,7 @@ type preset struct {
 	TcpPort          *int              `toml:"tcp_port"`
 	LayerIcons       map[string]string `toml:"layer_icons"`
 	Hooks            *hooks            `toml:"hooks"`
-	ExtraArgs        []string          `toml:"extra_args"`
+	ExtraArgs        extraArgs         `toml:"extra_args"`
 }
 
 func (p *preset) applyDefaults(defaults *preset) {
@@ -109,11 +109,7 @@ func (p *preset) applyDefaults(defaults *preset) {
 		p.Hooks = defaults.Hooks
 	}
 	if p.ExtraArgs == nil {
-		if defaults.ExtraArgs == nil {
-			p.ExtraArgs = []string{}
-		} else {
-			p.ExtraArgs = defaults.ExtraArgs
-		}
+		p.ExtraArgs = defaults.ExtraArgs
 	}
 }
 
@@ -142,7 +138,11 @@ func (p *preset) intoExported() (*Preset, error) {
 		result.Hooks = *x
 	}
 	if p.ExtraArgs != nil {
-		result.ExtraArgs = p.ExtraArgs
+		x, err := p.ExtraArgs.intoExported()
+		if err != nil {
+			return nil, err
+		}
+		result.ExtraArgs = x
 	}
 	return result, nil
 }
@@ -178,6 +178,17 @@ func (p *hooks) intoExported() (*Hooks, error) {
 		PostStartAsync: parseResults[2],
 		PostStop:       parseResults[3],
 	}, nil
+}
+
+type extraArgs []string
+
+func (e extraArgs) intoExported() ([]string, error) {
+	for _, s := range e {
+		if strings.HasPrefix(s, "--port") || strings.HasPrefix(s, "-p") {
+			return nil, fmt.Errorf("port argument is not allowed in extra_args, use tcp_port instead")
+		}
+	}
+	return e, nil
 }
 
 func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
