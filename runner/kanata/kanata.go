@@ -41,7 +41,7 @@ func NewKanataInstance() *Kanata {
 	}
 }
 
-func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string, tcpPort int, hooks config.Hooks) error {
+func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string, tcpPort int, hooks config.Hooks, extraArgs []string) error {
 	if kanataExecutable == "" {
 		var err error
 		kanataExecutable, err = exec.LookPath("kanata")
@@ -55,7 +55,8 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		cfgArg = "-c=" + kanataConfig
 	}
 
-	cmd := cmd(ctx, kanataExecutable, cfgArg, "--port", fmt.Sprint(tcpPort))
+	args := append([]string{cfgArg, "--port", fmt.Sprint(tcpPort)}, extraArgs...)
+	cmd := cmd(ctx, kanataExecutable, args...)
 
 	go func() {
 		selfCtx, selfCancel := context.WithCancelCause(ctx)
@@ -234,7 +235,7 @@ func runAllBlockingHooks(hooks [][]string, hookName string) error {
 	defer cancel()
 	wg := sync.WaitGroup{}
 	wg.Add(len(hooks))
-	var errors = make([]error, len(hooks))
+	errors := make([]error, len(hooks))
 	for i, hook := range hooks {
 		log.Infof("Running %s hook [%d] '%s'", hookName, i, hook)
 		i := i // fix race condition

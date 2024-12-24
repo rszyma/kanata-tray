@@ -48,6 +48,7 @@ allow_concurrent_presets = false
 kanata_executable = '~/bin/kanata' # if empty or omitted, system $PATH will be searched.
 kanata_config = '' # if empty or not omitted, kanata default config locations will be used.
 tcp_port = 5829 # if not specified, defaults to 5829
+extra_args = ['-n', '-c=~/.config/kanata/another.kbd']
 
 [defaults.hooks]
 # Hooks allow running custom commands on specific events (e.g. starting preset).
@@ -64,6 +65,7 @@ autorun = true
 # kanata_executable = ''
 # layer_icons = {  }
 # tcp_port = 1234
+# extra_args = ['-n', '-c=~/.config/kanata/another.kbd']
 
 [presets.'test cfg']
 kanata_config = '~/.config/kanata/test.kbd'
@@ -72,7 +74,7 @@ kanata_config = '~/.config/kanata/test.kbd'
 ### Explanation
 
 `presets` - a config item, that adds an entry to tray menu. Each preset can have different settings for running kanata with:
-`kanata_config`, `kanata_executable`, `autorun`, `layer_icons`, `tcp_port`.
+`kanata_config`, `kanata_executable`, `autorun`, `layer_icons`, `tcp_port`, `extra_args`.
 
 `preset.autorun` - when set to true, preset will run at kanata-tray startup.
 
@@ -86,7 +88,7 @@ When disabled, switching presets will stop currently running preset (if any).
 Disabled by default.
 
 Other notes:
-- You can use `~` in `kanata_config` and `kanata_executable` to substitute to your "home" directory.
+- You can use `~` in `kanata_config`, `kanata_executable` and `extra_args` to substitute to your "home" directory.
 - On Windows: make sure to surround paths with single-quotes `'` instead of double-quotes, otherwise paths will not work (because `\` would be treated as escape character).
 
 ### Hooks

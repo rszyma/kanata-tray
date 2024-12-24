@@ -61,6 +61,13 @@
                         }
                     },
                     "description": "Allows running additional scripts/programs on specific events."
+                },
+                "extra_args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "You may pass extra arguments to kanata except for the port (use tcp_port instead), such as --nodelay, additional --cfg params, etc."
                 }
             },
             "additionalProperties": false,

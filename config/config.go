@@ -6,11 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/labstack/gommon/log"
-
 	"github.com/elliotchance/orderedmap/v2"
 	"github.com/k0kubun/pp/v3"
 	"github.com/kr/pretty"
+	"github.com/labstack/gommon/log"
 	"github.com/pelletier/go-toml/v2"
 	tomlu "github.com/pelletier/go-toml/v2/unstable"
 )
@@ -49,6 +48,7 @@ type Preset struct {
 	TcpPort          int
 	LayerIcons       map[string]string
 	Hooks            Hooks
+	ExtraArgs        []string
 }
 
 func (m *Preset) GoString() string {
@@ -84,6 +84,7 @@ type preset struct {
 	TcpPort          *int              `toml:"tcp_port"`
 	LayerIcons       map[string]string `toml:"layer_icons"`
 	Hooks            *hooks            `toml:"hooks"`
+	ExtraArgs        extraArgs         `toml:"extra_args"`
 }
 
 func (p *preset) applyDefaults(defaults *preset) {
@@ -106,6 +107,9 @@ func (p *preset) applyDefaults(defaults *preset) {
 	// }
 	if p.Hooks == nil {
 		p.Hooks = defaults.Hooks
+	}
+	if p.ExtraArgs == nil {
+		p.ExtraArgs = defaults.ExtraArgs
 	}
 }
 
@@ -132,6 +136,13 @@ func (p *preset) intoExported() (*Preset, error) {
 			return nil, err
 		}
 		result.Hooks = *x
+	}
+	if p.ExtraArgs != nil {
+		x, err := p.ExtraArgs.intoExported()
+		if err != nil {
+			return nil, err
+		}
+		result.ExtraArgs = x
 	}
 	return result, nil
 }
@@ -167,6 +178,17 @@ func (p *hooks) intoExported() (*Hooks, error) {
 		PostStartAsync: parseResults[2],
 		PostStop:       parseResults[3],
 	}, nil
+}
+
+type extraArgs []string
+
+func (e extraArgs) intoExported() ([]string, error) {
+	for _, s := range e {
+		if strings.HasPrefix(s, "--port") || strings.HasPrefix(s, "-p") {
+			return nil, fmt.Errorf("port argument is not allowed in extra_args, use tcp_port instead")
+		}
+	}
+	return e, nil
 }
 
 func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
@@ -274,7 +296,6 @@ func layersOrder(cfgContent []byte) ([]string, error) {
 	}
 
 	return layerNamesInOrder, nil
-
 }
 
 // helper to transfor a key iterator to a slice of strings

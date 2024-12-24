@@ -70,6 +70,12 @@ func MenuTemplateFromConfig(cfg config.Config) ([]PresetMenuEntry, error) {
 		if err != nil {
 			return nil, err
 		}
+		for i, arg := range preset.ExtraArgs {
+			preset.ExtraArgs[i], err = expandHomeDir(arg)
+			if err != nil {
+				return nil, err
+			}
+		}
 
 		entry := PresetMenuEntry{
 			IsSelectable: true,
