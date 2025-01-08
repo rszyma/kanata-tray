@@ -20,7 +20,7 @@
             name = "kanata-tray";
             src = pkgs.lib.cleanSource ./.;
             vendorHash = "sha256-2rR368zzVFhgntVDynXCYNWzM4jalsnDRGaUo81bqIE=";
-            CGO_ENABLED = 1;
+            env.CGO_ENABLED = 1;
             flags = [ "-trimpath" ];
             ldflags = [
               "-s"
