@@ -1,29 +1,62 @@
 {
-  description = "devshell with all required dependencies for kanata-tray";
+  description = "Flake for kanata-tray";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { nixpkgs, flake-utils, ... }: flake-utils.lib.eachDefaultSystem (system:
-    let
-      pkgs = nixpkgs.legacyPackages.${system};
-    in
-    {
-      devShells.default = pkgs.mkShell {
-        packages = with pkgs; [
-          # build and runtime dependencies
-          pkg-config
-          libayatana-appindicator
-          gtk3
-          just
+  outputs = { self, nixpkgs, flake-utils, ... }: flake-utils.lib.eachDefaultSystem
+    (system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+        runtime-deps = [ pkgs.libayatana-appindicator pkgs.gtk3 ];
+        build-deps = [ pkgs.pkg-config ];
+      in
+      rec {
+        packages.default = packages.kanata-tray;
+        packages.kanata-tray =
+          pkgs.buildGoModule {
+            name = "kanata-tray";
+            src = pkgs.lib.cleanSource ./.;
+            vendorHash = "sha256-2rR368zzVFhgntVDynXCYNWzM4jalsnDRGaUo81bqIE=";
+            CGO_ENABLED = 1;
+            flags = [ "-trimpath" ];
+            ldflags = [
+              "-s"
+              "-w"
+              "-X main.buildVersion=nix"
+              "-X main.buildHash=${self.shortRev or self.dirtyShortRev or "unknown"}"
+              "-X main.buildDate=unknown"
+            ];
+            nativeBuildInputs = build-deps;
+            buildInputs = runtime-deps ++ [ pkgs.makeWrapper ];
+            postInstall = ''
+              wrapProgram $out/bin/kanata-tray --set KANATA_TRAY_LOG_DIR /tmp --prefix PATH : $out/bin
+            '';
+            meta = with pkgs.lib; {
+              description = "Tray Icon for Kanata";
+              longDescription = ''
+                A simple wrapper for kanata to control it from tray icon.
+                Works on Windows, Linux and macOS.
+              '';
+              homepage = "https://github.com/rszyma/kanata-tray";
+              license = licenses.gpl3;
+              platforms = platforms.unix;
+            };
+          };
 
-          # converting png -> ico
-          #  convert input.png -define icon:auto-resize=48,32,16 output.ico
-          imagemagick
-        ];
-      };
-    }
-  );
+        devShells.default = pkgs.mkShell
+          {
+            packages = with pkgs;
+              build-deps
+              ++ runtime-deps
+              ++ [
+                # converting png -> ico
+                #  convert input.png -define icon:auto-resize=48,32,16 output.ico
+                imagemagick
+              ];
+          };
+      }
+    );
 }
