@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	buildVersion string
-	buildHash    string
-	buildDate    string
+	buildVersion string = "not set"
+	buildHash    string = "not set"
+	buildDate    string = "not set"
 )
 
 var (
@@ -36,11 +36,12 @@ const (
 func main() {
 	flag.Parse()
 	if *version {
-		log.Printf("kanata-tray %s", buildVersion)
-		log.Printf("Commit Hash: %s", buildHash)
-		log.Printf("Build Date: %s", buildDate)
-		log.Printf("OS: %s", runtime.GOOS)
-		log.Printf("Arch: %s", runtime.GOARCH)
+		fmt.Println("kanata-tray")
+		fmt.Printf("Version: %s\n", buildVersion)
+		fmt.Printf("Commit Hash: %s\n", buildHash)
+		fmt.Printf("Build Date: %s\n", buildDate)
+		fmt.Printf("OS: %s\n", runtime.GOOS)
+		fmt.Printf("Arch: %s\n", runtime.GOARCH)
 		os.Exit(1)
 	}
 
