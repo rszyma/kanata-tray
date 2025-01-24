@@ -6,3 +6,6 @@ kanata-tray
 .envrc
 kanata_tray_lastrun.log
 result
+*.kbd
+kanata-tray.*toml*
+kanata

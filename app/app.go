@@ -10,8 +10,8 @@ import (
 	"github.com/labstack/gommon/log"
 	"github.com/skratchdot/open-golang/open"
 
-	"github.com/rszyma/kanata-tray/icons"
 	runner_pkg "github.com/rszyma/kanata-tray/runner"
+	"github.com/rszyma/kanata-tray/status_icons"
 )
 
 type SystrayApp struct {
@@ -45,7 +45,7 @@ type SystrayApp struct {
 }
 
 func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool, logFilepath string) *SystrayApp {
-	systray.SetIcon(icons.Default)
+	systray.SetIcon(status_icons.Default)
 	systray.SetTooltip("kanata-tray")
 
 	t := &SystrayApp{
@@ -125,7 +125,7 @@ func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 }
 
 func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder string) {
-	app.setIcon(icons.Pause)
+	app.setIcon(status_icons.Pause)
 
 	// handle autoruns
 	autoranOnePreset := false
@@ -156,7 +156,7 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 			if event.Item.LayerChange != nil {
 				icon := app.layerIcons.IconForLayerName(event.PresetName, event.Item.LayerChange.NewLayer)
 				if icon == nil {
-					icon = icons.Default
+					icon = status_icons.Default
 				}
 				app.setIcon(icon)
 			}
@@ -177,7 +177,7 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 			}
 			if event.Item.ConfigFileReload != nil {
 				prevIcon := app.currentIconData
-				app.setIcon(icons.LiveReload)
+				app.setIcon(status_icons.LiveReload)
 				time.Sleep(150 * time.Millisecond)
 				app.setIcon(prevIcon)
 			}
@@ -192,14 +192,14 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 			if runnerPipelineErr != nil {
 				log.Errorf("Kanata runner terminated with an error: %v", runnerPipelineErr)
 				app.setStatus(i, statusCrashed)
-				app.setIcon(icons.Crash)
+				app.setIcon(status_icons.Crash)
 			} else {
 				log.Infof("Previous kanata process terminated successfully")
 				app.setStatus(i, statusIdle)
 				if app.isAnyPresetRunning() {
-					app.setIcon(icons.Default)
+					app.setIcon(status_icons.Default)
 				} else {
-					app.setIcon(icons.Pause)
+					app.setIcon(status_icons.Pause)
 				}
 			}
 			if app.scheduledPresetIndex != -1 {
