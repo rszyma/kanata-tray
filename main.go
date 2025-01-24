@@ -26,6 +26,7 @@ var (
 var (
 	logLevel = flag.Uint("log-level", uint(log.INFO), "Set log level for kanata-tray (1-debug, 2-info, 3-warn) (note: doesn't affect kanata logging level)")
 	version  = flag.Bool("version", false, "Print the version and exit")
+	help     = flag.Bool("help", false, "Print help and exit")
 )
 
 const (
@@ -33,8 +34,23 @@ const (
 	logFilename    = "kanata_tray_lastrun.log"
 )
 
+const additional_help = `
+environment variables:
+* KANATA_TRAY_CONFIG_DIR - sets custom config directory
+* KANATA_TRAY_LOG_DIR - sets custom log directory (default is same folder as the binary)
+
+`
+
 func main() {
+	// flag.ErrHelp = fmt.Errorf("%s\n%s", flag.ErrHelp, additional_help)
 	flag.Parse()
+
+	if *help {
+		flag.PrintDefaults()
+		fmt.Print(additional_help)
+		os.Exit(1)
+	}
+
 	if *version {
 		fmt.Println("kanata-tray")
 		fmt.Printf("Version: %s\n", buildVersion)
