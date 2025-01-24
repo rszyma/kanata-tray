@@ -88,6 +88,7 @@ Disabled by default.
 
 Other notes:
 - You can use `~` in `kanata_config`, `kanata_executable` and `extra_args` to substitute to your "home" directory.
+- Paths starting with `.\` (on Windows) or `./` (on Linux and macOS) will reference files located in kanata-tray config directory.
 - On Windows: make sure to surround paths with single-quotes `'` instead of double-quotes, otherwise paths will not work (because `\` would be treated as escape character).
 
 ### Overriding status icons
