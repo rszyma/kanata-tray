@@ -15,6 +15,7 @@ import (
 	"github.com/rszyma/kanata-tray/app"
 	"github.com/rszyma/kanata-tray/config"
 	"github.com/rszyma/kanata-tray/runner"
+	"github.com/rszyma/kanata-tray/status_icons"
 )
 
 var (
@@ -161,6 +162,15 @@ func mainImpl() error {
 		return fmt.Errorf("failed to create menu from config: %v", err)
 	}
 	layerIcons := app.ResolveIcons(configFolder, cfg)
+
+	err = status_icons.CreateDefaultStatusIconsDirIfNotExists(configFolder)
+	if err != nil {
+		return fmt.Errorf("CreateDefaultStatusIconsDirIfNotExists: %v", err)
+	}
+	err = status_icons.LoadCustomStatusIcons(configFolder)
+	if err != nil {
+		return fmt.Errorf("LoadCustomStatusIcons: %v", err)
+	}
 
 	runner := runner.NewRunner()
 
