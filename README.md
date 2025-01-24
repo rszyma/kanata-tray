@@ -48,7 +48,6 @@ allow_concurrent_presets = false
 kanata_executable = '~/bin/kanata' # if empty or omitted, system $PATH will be searched.
 kanata_config = '' # if empty or not omitted, kanata default config locations will be used.
 tcp_port = 5829 # if not specified, defaults to 5829
-extra_args = ['-n', '-c=~/.config/kanata/another.kbd']
 
 [defaults.hooks]
 # Hooks allow running custom commands on specific events (e.g. starting preset).
@@ -90,6 +89,21 @@ Disabled by default.
 Other notes:
 - You can use `~` in `kanata_config`, `kanata_executable` and `extra_args` to substitute to your "home" directory.
 - On Windows: make sure to surround paths with single-quotes `'` instead of double-quotes, otherwise paths will not work (because `\` would be treated as escape character).
+
+### Overriding status icons
+
+It's possible to customize looks of status icons - i.e. reload, idle, paused.
+
+Similar to `icons` folder (layer icons), `status_icons` folder will be created
+next to `kanata-tray.toml` if it doesn't exists. When first creating, it will
+also populate with default icons. To override status icons, simply replace it
+with other one of your choice.
+
+- Accepted file types are the same as in `icons`.
+- The filename prefix must match specifc status i.e. files must start with one of:
+"default", "crash", "pause", "live-reload".
+- If there are multiple files matching the prefix, only one of them will be loaded,
+and other ignored.
 
 ### Hooks
 
