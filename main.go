@@ -68,7 +68,11 @@ func main() {
 	}
 }
 
-func figureOutConfigDir() (configFolder string) {
+// Try to resolve config dir, return first that matches. Order:
+// 1. $KANATA_TRAY_CONFIG_DIR, if set
+// 2. The same dir as executable, if it contains kanata-tray.toml
+// 3. $XDG_CONFIG_HOME/kanata-tray (On Linux; Other OSes have their own local config path too)
+func figureOutConfigDir() string {
 	if v := os.Getenv("KANATA_TRAY_CONFIG_DIR"); v != "" {
 		return v
 	}
@@ -136,8 +140,12 @@ func mainImpl() error {
 	}
 
 	configFolder := figureOutConfigDir()
-
 	log.Infof("kanata-tray config folder: %s", configFolder)
+
+	err = os.Chdir(configFolder)
+	if err != nil {
+		return fmt.Errorf("failed to change dir: %v", err)
+	}
 
 	err = os.MkdirAll(filepath.Join(configFolder, "icons"), os.ModePerm)
 	if err != nil {
