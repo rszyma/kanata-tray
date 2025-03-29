@@ -10,7 +10,8 @@
     (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        runtime-deps = [ pkgs.libayatana-appindicator pkgs.gtk3 ];
+        inherit (pkgs.stdenvNoCC) hostPlatform;
+        runtime-deps = pkgs.lib.optionals (hostPlatform.isLinux) [pkgs.libayatana-appindicator pkgs.gtk3];
         build-deps = [ pkgs.pkg-config ];
       in
       rec {
@@ -20,7 +21,11 @@
             name = "kanata-tray";
             src = pkgs.lib.cleanSource ./.;
             vendorHash = "sha256-2rR368zzVFhgntVDynXCYNWzM4jalsnDRGaUo81bqIE=";
-            env.CGO_ENABLED = 1;
+            env = { CGO_ENABLED = 1; } // pkgs.lib.attrsets.optionalAttrs (hostPlatform.isDarwin) {
+              GOOS = "darwin";
+              GO111MODULE = "on";
+            };
+
             flags = [ "-trimpath" ];
             ldflags = [
               "-s"
