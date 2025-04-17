@@ -175,7 +175,13 @@ func mainImpl() error {
 	runner := runner.NewRunner()
 
 	onReady := func() {
-		app := app.NewSystrayApp(menuTemplate, layerIcons, cfg.General.AllowConcurrentPresets, logFilepath)
+		app := app.NewSystrayApp(app.Opts{
+			MenuTemplate:           menuTemplate,
+			LayerIcons:             layerIcons,
+			AllowConcurrentPresets: cfg.General.AllowConcurrentPresets,
+			LogFilepath:            logFilepath,
+		})
+
 		go app.StartProcessingLoop(runner, configFolder)
 	}
 

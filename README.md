@@ -48,6 +48,7 @@ allow_concurrent_presets = false
 kanata_executable = '~/bin/kanata' # if empty or omitted, system $PATH will be searched.
 kanata_config = '' # if empty or not omitted, kanata default config locations will be used.
 tcp_port = 5829 # if not specified, defaults to 5829
+autorestart_on_crash = true # default: false
 
 [defaults.hooks]
 # Hooks allow running custom commands on specific events (e.g. starting preset).
@@ -73,11 +74,14 @@ kanata_config = '~/.config/kanata/test.kbd'
 ### Explanation
 
 `presets` - a config item, that adds an entry to tray menu. Each preset can have different settings for running kanata with:
-`kanata_config`, `kanata_executable`, `autorun`, `layer_icons`, `tcp_port`, `extra_args`.
+`kanata_config`, `kanata_executable`, `autorun`, `layer_icons`, `tcp_port`, `extra_args`, `autorestart_on_crash`.
 
 `preset.autorun` - when set to true, preset will run at kanata-tray startup.
 
 `preset.layer_icons` - maps kanata layer names to custom icons. Custom icons should be placed in `icons` folder in config directory, next to `kanata-tray.toml`. Accepted icon types on Linux are `.ico`, `.png`, `.jpg`; on Windows only `.ico` is supported. You can assign an icon to special identifier `'*'` to change icon for other layers not specified in `[layer_icons]`.
+
+`preset.autorestart_on_crash` - when set to true, preset will automatically restart whenever kanata crashes.
+In case of too rapid restarts (above 2 autorestarts / minute) this feature will be automatically disabled.
 
 `defaults` - a config item, that allows to overwrite default values for all presets.
 It accepts same configuration options that `presets` do.
