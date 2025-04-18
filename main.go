@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"github.com/getlantern/systray"
 	"github.com/kirsle/configdir"
 	"github.com/labstack/gommon/log"
+	"github.com/spf13/pflag"
 
 	"github.com/rszyma/kanata-tray/app"
 	"github.com/rszyma/kanata-tray/config"
@@ -25,9 +25,9 @@ var (
 )
 
 var (
-	logLevel = flag.Uint("log-level", uint(log.INFO), "Set log level for kanata-tray (1-debug, 2-info, 3-warn) (note: doesn't affect kanata logging level)")
-	version  = flag.Bool("version", false, "Print the version and exit")
-	help     = flag.Bool("help", false, "Print help and exit")
+	logLevel = pflag.Uint("log-level", uint(log.INFO), "Set log level for kanata-tray (1-debug, 2-info, 3-warn) (note: doesn't affect kanata logging level)")
+	version  = pflag.Bool("version", false, "Print the version and exit")
+	help     = pflag.Bool("help", false, "Print help and exit")
 )
 
 const (
@@ -36,18 +36,20 @@ const (
 )
 
 const additional_help = `
-environment variables:
-* KANATA_TRAY_CONFIG_DIR - sets custom config directory
-* KANATA_TRAY_LOG_DIR - sets custom log directory (default is same folder as the binary)
+Environment Variables:
+      KANATA_TRAY_CONFIG_DIR - sets custom config directory
+      KANATA_TRAY_LOG_DIR - sets custom log directory (default is same folder as the binary)
 
 `
 
 func main() {
-	// flag.ErrHelp = fmt.Errorf("%s\n%s", flag.ErrHelp, additional_help)
-	flag.Parse()
+	pflag.Parse()
 
 	if *help {
-		flag.PrintDefaults()
+		fmt.Println("kanata-tray: tray icon for kanata")
+		fmt.Println()
+		fmt.Println("Options:")
+		pflag.PrintDefaults()
 		fmt.Print(additional_help)
 		os.Exit(1)
 	}
@@ -137,6 +139,8 @@ func mainImpl() error {
 	if err != nil {
 		log.SetOutput(logFile)
 	} else {
+		// FIXME: logger lib disables color output for tee here
+		// because it detects it's not directly a tty.
 		log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 	}
 
