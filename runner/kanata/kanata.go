@@ -26,7 +26,6 @@ type Kanata struct {
 
 	retCh     chan error // Returns the error returned by `cmd.Wait()`
 	cmd       *exec.Cmd
-	logFile   *os.File
 	tcpClient *tcp_client.KanataTcpClient
 }
 
@@ -36,12 +35,13 @@ func NewKanataInstance() *Kanata {
 
 		retCh:     make(chan error),
 		cmd:       nil,
-		logFile:   nil,
 		tcpClient: tcp_client.NewTcpClient(),
 	}
 }
 
-func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string, tcpPort int, hooks config.Hooks, extraArgs []string) error {
+func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string,
+	tcpPort int, hooks config.Hooks, extraArgs []string, logFile *os.File,
+) error {
 	if kanataExecutable == "" {
 		var err error
 		kanataExecutable, err = exec.LookPath("kanata")
@@ -69,19 +69,11 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			<-r.processSlotCh
 		}()
 
-		if r.logFile != nil {
-			r.logFile.Close()
-		}
 		var err error
-		r.logFile, err = os.CreateTemp("", "kanata_lastrun_*.log")
-		if err != nil {
-			r.retCh <- fmt.Errorf("failed to create temp log file: %v", err)
-			return
-		}
 
 		r.cmd = cmd
-		r.cmd.Stdout = r.logFile
-		r.cmd.Stderr = r.logFile
+		r.cmd.Stdout = logFile
+		r.cmd.Stderr = logFile
 
 		err = runAllBlockingHooks(hooks.PreStart, "pre-start")
 		if err != nil {
@@ -188,13 +180,6 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 	}()
 
 	return nil
-}
-
-func (r *Kanata) LogFile() (string, error) {
-	if r.logFile == nil {
-		return "", fmt.Errorf("log file doesn't exist")
-	}
-	return r.logFile.Name(), nil
 }
 
 func (r *Kanata) RetCh() <-chan error {

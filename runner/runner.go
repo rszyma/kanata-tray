@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"sync"
 
@@ -49,7 +50,9 @@ func NewRunner() *Runner {
 // Calling Run when there's a previous preset running with the the same
 // presetName will block until the previous process finishes.
 // To stop running preset, caller needs to cancel ctx.
-func (r *Runner) Run(ctx context.Context, presetName string, kanataExecutable string, kanataConfig string, tcpPort int, hooks config.Hooks, extraArgs []string) error {
+func (r *Runner) Run(ctx context.Context, presetName string, kanataExecutable string,
+	kanataConfig string, tcpPort int, hooks config.Hooks, extraArgs []string, kanataLogFile *os.File,
+) error {
 	r.instancesMappingLock.Lock()
 	defer r.instancesMappingLock.Unlock()
 
@@ -90,7 +93,7 @@ func (r *Runner) Run(ctx context.Context, presetName string, kanataExecutable st
 	}
 
 	instance := r.kanataInstancePool[instanceIndex]
-	err := instance.RunNonblocking(ctx, kanataExecutable, kanataConfig, tcpPort, hooks, extraArgs)
+	err := instance.RunNonblocking(ctx, kanataExecutable, kanataConfig, tcpPort, hooks, extraArgs, kanataLogFile)
 	if err != nil {
 		return fmt.Errorf("failed to run kanata: %v", err)
 	}
@@ -154,14 +157,4 @@ func (r *Runner) RetCh() <-chan ItemAndPresetName[error] {
 
 func (r *Runner) ServerMessageCh() <-chan ItemAndPresetName[tcp_client.ServerMessage] {
 	return r.serverMessageCh
-}
-
-func (r *Runner) LogFile(presetName string) (string, error) {
-	r.instancesMappingLock.Lock()
-	defer r.instancesMappingLock.Unlock()
-	presetIndex, ok := r.activeKanataInstances[presetName]
-	if !ok {
-		return "", fmt.Errorf("preset with the given name not found")
-	}
-	return r.kanataInstancePool[presetIndex].LogFile()
 }
