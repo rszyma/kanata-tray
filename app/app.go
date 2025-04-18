@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"slices"
 	"time"
 
@@ -28,6 +29,7 @@ type SystrayApp struct {
 	statuses                 []KanataStatus
 	presetCancelFuncs        []context.CancelFunc // cancel functions can be nil
 	presetAutorestartLimiter []RestartLimiter
+	presetLogFiles           []*os.File
 
 	currentIconData []byte
 	layerIcons      LayerIcons
@@ -82,6 +84,8 @@ func NewSystrayApp(opts Opts) *SystrayApp {
 		t.mPresetLogs = append(t.mPresetLogs, openLogsItem)
 
 		t.presetAutorestartLimiter = append(t.presetAutorestartLimiter, RestartLimiter{})
+
+		t.presetLogFiles = append(t.presetLogFiles, nil)
 	}
 
 	systray.AddSeparator()
@@ -112,10 +116,19 @@ func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 	}
 
 	log.Infof("Running preset '%s'", t.presets[presetIndex].PresetName)
-
 	t.setStatus(presetIndex, statusStarting)
+
+	t.presetLogFiles[presetIndex].Close()
+	var err error
+	t.presetLogFiles[presetIndex], err = os.CreateTemp("", "kanata_lastrun_*.log")
+	if err != nil {
+		log.Errorf("failed to create temp log file: %v", err)
+		t.setStatus(presetIndex, statusCrashed)
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
-	err := runner.Run(
+	err = runner.Run(
 		ctx,
 		t.presets[presetIndex].PresetName,
 		t.presets[presetIndex].Preset.KanataExecutable,
@@ -123,6 +136,7 @@ func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 		t.presets[presetIndex].Preset.TcpPort,
 		t.presets[presetIndex].Preset.Hooks,
 		t.presets[presetIndex].Preset.ExtraArgs,
+		t.presetLogFiles[presetIndex],
 	)
 	if err != nil {
 		log.Errorf("runner.Run failed with: %v", err)
@@ -237,12 +251,13 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 			}
 		case i := <-app.openLogsClickedCh:
 			presetName := app.presets[i].PresetName
-			logFile, err := runner.LogFile(presetName)
-			if err != nil {
-				log.Warnf("Can't open log file for preset '%s': %v", presetName, err)
+			f := app.presetLogFiles[i]
+			if f == nil {
+				log.Warnf("No log file found for preset '%s'", presetName)
 			} else {
-				log.Debugf("Opening log file for preset '%s': '%s'", presetName, logFile)
-				open.Start(logFile)
+				filename := f.Name()
+				log.Debugf("Opening log file for preset '%s': '%s'", presetName, filename)
+				open.Start(filename)
 			}
 		case <-app.mOptions.ClickedCh:
 			open.Start(configFolder)
