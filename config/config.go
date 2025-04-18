@@ -42,13 +42,14 @@ type Config struct {
 }
 
 type Preset struct {
-	Autorun          bool
-	KanataExecutable string
-	KanataConfig     string
-	TcpPort          int
-	LayerIcons       map[string]string
-	Hooks            Hooks
-	ExtraArgs        []string
+	Autorun            bool
+	KanataExecutable   string
+	KanataConfig       string
+	TcpPort            int
+	LayerIcons         map[string]string
+	Hooks              Hooks
+	ExtraArgs          []string
+	AutorestartOnCrash bool
 }
 
 func (m *Preset) GoString() string {
@@ -78,13 +79,14 @@ type config struct {
 }
 
 type preset struct {
-	Autorun          *bool             `toml:"autorun"`
-	KanataExecutable *string           `toml:"kanata_executable"`
-	KanataConfig     *string           `toml:"kanata_config"`
-	TcpPort          *int              `toml:"tcp_port"`
-	LayerIcons       map[string]string `toml:"layer_icons"`
-	Hooks            *hooks            `toml:"hooks"`
-	ExtraArgs        extraArgs         `toml:"extra_args"`
+	Autorun            *bool             `toml:"autorun"`
+	KanataExecutable   *string           `toml:"kanata_executable"`
+	KanataConfig       *string           `toml:"kanata_config"`
+	TcpPort            *int              `toml:"tcp_port"`
+	LayerIcons         map[string]string `toml:"layer_icons"`
+	Hooks              *hooks            `toml:"hooks"`
+	ExtraArgs          extraArgs         `toml:"extra_args"`
+	AutorestartOnCrash *bool             `toml:"autorestart_on_crash"`
 }
 
 func (p *preset) applyDefaults(defaults *preset) {
@@ -110,6 +112,9 @@ func (p *preset) applyDefaults(defaults *preset) {
 	}
 	if p.ExtraArgs == nil {
 		p.ExtraArgs = defaults.ExtraArgs
+	}
+	if p.AutorestartOnCrash == nil {
+		p.AutorestartOnCrash = defaults.AutorestartOnCrash
 	}
 }
 
@@ -143,6 +148,9 @@ func (p *preset) intoExported() (*Preset, error) {
 			return nil, err
 		}
 		result.ExtraArgs = x
+	}
+	if p.AutorestartOnCrash != nil {
+		result.AutorestartOnCrash = *p.AutorestartOnCrash
 	}
 	return result, nil
 }

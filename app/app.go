@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/getlantern/systray"
@@ -23,9 +24,10 @@ type SystrayApp struct {
 	// Value -1 denotes that no config is scheduled to run.
 	scheduledPresetIndex int
 
-	presets           []PresetMenuEntry
-	statuses          []KanataStatus
-	presetCancelFuncs []context.CancelFunc // cancel functions can be nil
+	presets                  []PresetMenuEntry
+	statuses                 []KanataStatus
+	presetCancelFuncs        []context.CancelFunc // cancel functions can be nil
+	presetAutorestartLimiter []RestartLimiter
 
 	currentIconData []byte
 	layerIcons      LayerIcons
@@ -44,19 +46,26 @@ type SystrayApp struct {
 	mQuit     *systray.MenuItem
 }
 
-func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowConcurrentPresets bool, logFilepath string) *SystrayApp {
+type Opts struct {
+	MenuTemplate           []PresetMenuEntry
+	LayerIcons             LayerIcons
+	AllowConcurrentPresets bool
+	LogFilepath            string
+}
+
+func NewSystrayApp(opts Opts) *SystrayApp {
 	systray.SetIcon(status_icons.Default)
 	systray.SetTooltip("kanata-tray")
 
 	t := &SystrayApp{
-		logFilepath:          logFilepath,
-		presets:              menuTemplate,
+		logFilepath:          opts.LogFilepath,
+		presets:              opts.MenuTemplate,
 		scheduledPresetIndex: -1,
-		layerIcons:           layerIcons,
-		concurrentPresets:    allowConcurrentPresets,
+		layerIcons:           opts.LayerIcons,
+		concurrentPresets:    opts.AllowConcurrentPresets,
 	}
 
-	for _, entry := range menuTemplate {
+	for _, entry := range opts.MenuTemplate {
 		menuItem := systray.AddMenuItem(entry.Title(statusIdle), entry.Tooltip())
 		if !entry.IsSelectable {
 			menuItem.Disable()
@@ -71,6 +80,8 @@ func NewSystrayApp(menuTemplate []PresetMenuEntry, layerIcons LayerIcons, allowC
 
 		openLogsItem := menuItem.AddSubMenuItem("Open kanata logs", "Open kanata log file")
 		t.mPresetLogs = append(t.mPresetLogs, openLogsItem)
+
+		t.presetAutorestartLimiter = append(t.presetAutorestartLimiter, RestartLimiter{})
 	}
 
 	systray.AddSeparator()
@@ -163,13 +174,7 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 			if event.Item.LayerNames != nil {
 				mappedLayers := app.layerIcons.MappedLayers(event.PresetName)
 				for _, mappedLayerName := range mappedLayers {
-					found := false
-					for _, kanataLayerName := range event.Item.LayerNames.Names {
-						if mappedLayerName == kanataLayerName {
-							found = true
-							break
-						}
-					}
+					found := slices.Contains(event.Item.LayerNames.Names, mappedLayerName)
 					if !found {
 						log.Warnf("Layer '%s' is mapped to an icon, but doesn't exist in the loaded kanata config", mappedLayerName)
 					}
@@ -193,6 +198,17 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				log.Errorf("Kanata runner terminated with an error: %v", runnerPipelineErr)
 				app.setStatus(i, statusCrashed)
 				app.setIcon(status_icons.Crash)
+
+				if app.presets[i].Preset.AutorestartOnCrash {
+					attemptCount, isAllowed := app.presetAutorestartLimiter[i].BeginAttempt()
+					if isAllowed {
+						log.Infof("[autorestart-on-crash] Restarting [%d/%d]", attemptCount, AutorestartLimit)
+						app.runPreset(i, runner)
+					} else {
+						log.Warnf("[autorestart-on-crash] Restarts have been triggering too rapidly. Stopping futher attempts.")
+						app.presetAutorestartLimiter[i].Clear()
+					}
+				}
 			} else {
 				log.Infof("Previous kanata process terminated successfully")
 				app.setStatus(i, statusIdle)
@@ -216,6 +232,7 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				app.cancel(i)
 			case statusCrashed:
 				// restart kanata (from crashed state)
+				app.presetAutorestartLimiter[i].Clear()
 				app.runPreset(i, runner)
 			}
 		case i := <-app.openLogsClickedCh:
@@ -256,12 +273,7 @@ func (t *SystrayApp) indexFromPresetName(presetName string) (int, error) {
 }
 
 func (t *SystrayApp) isAnyPresetRunning() bool {
-	for _, status := range t.statuses {
-		if status == statusRunning {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(t.statuses, statusRunning)
 }
 
 func (t *SystrayApp) setStatus(presetIndex int, status KanataStatus) {

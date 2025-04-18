@@ -68,6 +68,10 @@
                         "type": "string"
                     },
                     "description": "You may pass extra arguments to kanata except for the port (use tcp_port instead), such as --nodelay, additional --cfg params, etc."
+                },
+                "autorestart_on_crash": {
+                    "type": "boolean",
+                    "description": "Whether the preset will be automatically restarted whenever kanata crashes."
                 }
             },
             "additionalProperties": false,
