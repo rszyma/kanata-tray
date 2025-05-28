@@ -89,6 +89,16 @@
                 "allow_concurrent_presets": {
                     "type": "boolean",
                     "description": "Toggle for running presets concurrently or stopping before switching to a new one."
+                },
+                "control_server_enable": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Optional TCP control server to listen for remote commands, such as stopping/starting a preset. Reference: https://github.com/rszyma/kanata-tray/blob/main/doc/control_server.md"
+                },
+                "control_server_port": {
+                    "type": "integer",
+                    "default": 8100,
+                    "description": "TCP port to run control server on."
                 }
             },
             "additionalProperties": false,

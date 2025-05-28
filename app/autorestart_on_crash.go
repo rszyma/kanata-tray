@@ -2,6 +2,7 @@ package app
 
 import "time"
 
+// TODO: rename to RateLimiter (+also rename BeginAttempt)
 type RestartLimiter struct {
 	recentRestarts []time.Time
 }

@@ -12,28 +12,12 @@ import (
 	"github.com/labstack/gommon/log"
 	"github.com/pelletier/go-toml/v2"
 	tomlu "github.com/pelletier/go-toml/v2/unstable"
+
+	_ "embed"
 )
 
-var defaultCfg = `
-# For help with configuration see https://github.com/rszyma/kanata-tray/blob/main/README.md
-"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json"
-
-general.allow_concurrent_presets = false
-defaults.tcp_port = 5829
-
-[defaults.hooks]
-# Hooks allow running custom commands on specific events (e.g. when starting preset).
-# Documentation: https://github.com/rszyma/kanata-tray/blob/main/doc/hooks.md
-
-[defaults.layer_icons]
-
-
-[presets.'Default Preset']
-kanata_executable = ''
-kanata_config = ''
-autorun = false
-
-`
+//go:embed default_config.toml
+var defaultConfigContent string
 
 type Config struct {
 	PresetDefaults Preset
@@ -59,6 +43,8 @@ func (m *Preset) GoString() string {
 
 type GeneralConfigOptions struct {
 	AllowConcurrentPresets bool
+	ControlServerEnable    bool
+	ControlServerPort      int
 }
 
 // Parsed hooks that contain list of args.
@@ -157,6 +143,8 @@ func (p *preset) intoExported() (*Preset, error) {
 
 type generalConfigOptions struct {
 	AllowConcurrentPresets *bool `toml:"allow_concurrent_presets"`
+	ControlServerEnable    *bool `toml:"control_server_enable"`
+	ControlServerPort      *int  `toml:"control_server_port"`
 }
 
 type hooks struct {
@@ -203,11 +191,11 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 	var cfg *config = &config{}
 	// Golang map don't keep track of insertion order, so we need to get the
 	// order of declarations in toml separately.
-	layersNames, err := layersOrder([]byte(defaultCfg))
+	layersNames, err := layersOrder([]byte(defaultConfigContent))
 	if err != nil {
 		panic(fmt.Errorf("default config failed layersOrder: %v", err))
 	}
-	err = toml.Unmarshal([]byte(defaultCfg), &cfg)
+	err = toml.Unmarshal([]byte(defaultConfigContent), &cfg)
 	if err != nil {
 		panic(fmt.Errorf("failed to parse default config: %v", err))
 	}
@@ -218,7 +206,10 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 	// Does the file not exist?
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
 		log.Infof("Config file doesn't exist. Creating default config. Path: '%s'", configFilePath)
-		os.WriteFile(configFilePath, []byte(defaultCfg), os.FileMode(0600))
+		err = os.WriteFile(configFilePath, []byte(defaultConfigContent), os.FileMode(0600))
+		if err != nil {
+			return nil, fmt.Errorf("failed to write default config file to '%s': %v", configFilePath, err)
+		}
 	} else {
 		// Load the existing file.
 		content, err := os.ReadFile(configFilePath)
@@ -252,6 +243,8 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 		PresetDefaults: *defaultsExported,
 		General: GeneralConfigOptions{
 			AllowConcurrentPresets: *cfg.General.AllowConcurrentPresets,
+			ControlServerEnable:    *cfg.General.ControlServerEnable,
+			ControlServerPort:      *cfg.General.ControlServerPort,
 		},
 		Presets: NewOrderedMap[string, *Preset](),
 	}

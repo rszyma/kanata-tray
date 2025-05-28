@@ -34,8 +34,10 @@ type SystrayApp struct {
 	currentIconData []byte
 	layerIcons      LayerIcons
 
-	statusClickedCh   chan int // the value sent in channel is an index of preset
-	openLogsClickedCh chan int // the value sent in channel is an index of preset
+	togglePresetCh   chan int // the value sent in channel is an index of preset
+	startPresetCh    chan int // the value sent in channel is an index of preset
+	stopPresetChan   chan int // the value sent in channel is an index of preset
+	openPresetLogsCh chan int // the value sent in channel is an index of preset
 
 	// Menu items
 
@@ -94,8 +96,10 @@ func NewSystrayApp(opts Opts) *SystrayApp {
 	t.mShowLogs = systray.AddMenuItem("Open logs", "Reveals kanata-tray log file")
 	t.mQuit = systray.AddMenuItem("Exit tray", "Closes kanata (if running) and exits the tray")
 
-	t.statusClickedCh = multipleMenuItemsClickListener(t.mPresetStatuses)
-	t.openLogsClickedCh = multipleMenuItemsClickListener(t.mPresetLogs)
+	t.togglePresetCh = multipleMenuItemsClickListener(t.mPresetStatuses)
+	t.startPresetCh = make(chan int)
+	t.stopPresetChan = make(chan int)
+	t.openPresetLogsCh = multipleMenuItemsClickListener(t.mPresetLogs)
 
 	return t
 }
@@ -151,23 +155,6 @@ func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 
 func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder string) {
 	app.setIcon(status_icons.Pause)
-
-	// handle autoruns
-	autoranOnePreset := false
-	for i, preset := range app.presets {
-		if preset.Preset.Autorun {
-			if !app.concurrentPresets {
-				if !autoranOnePreset {
-					autoranOnePreset = true
-				} else {
-					log.Warnf("more than 1 preset has autorun enabled, but " +
-						"can't run them all, because `allow_concurrent_presets` is not enabled.")
-					break
-				}
-			}
-			app.runPreset(i, runner)
-		}
-	}
 
 	serverMessageCh := runner.ServerMessageCh()
 	retCh := runner.RetCh()
@@ -236,7 +223,7 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				app.runPreset(app.scheduledPresetIndex, runner)
 				app.scheduledPresetIndex = -1
 			}
-		case i := <-app.statusClickedCh:
+		case i := <-app.togglePresetCh:
 			switch app.statuses[i] {
 			case statusIdle:
 				// run kanata
@@ -249,7 +236,29 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				app.presetAutorestartLimiter[i].Clear()
 				app.runPreset(i, runner)
 			}
-		case i := <-app.openLogsClickedCh:
+		case i := <-app.stopPresetChan:
+			switch app.statuses[i] {
+			case statusIdle:
+				// already not running, do nothing
+			case statusRunning:
+				// stop kanata
+				app.cancel(i)
+			case statusCrashed:
+				// already not running, do nothing
+			}
+		case i := <-app.startPresetCh:
+			switch app.statuses[i] {
+			case statusIdle:
+				// run kanata
+				app.runPreset(i, runner)
+			case statusRunning:
+				// alredy running, do nothing
+			case statusCrashed:
+				// restart kanata (from crashed state)
+				app.presetAutorestartLimiter[i].Clear()
+				app.runPreset(i, runner)
+			}
+		case i := <-app.openPresetLogsCh:
 			presetName := app.presets[i].PresetName
 			f := app.presetLogFiles[i]
 			if f == nil {
@@ -278,13 +287,32 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 	}
 }
 
+// Run all presets with autorun=true. NOOP if they are running already.
+func (app *SystrayApp) Autorun() {
+	autoranOnePreset := false
+	for i, preset := range app.presets {
+		if preset.Preset.Autorun {
+			if !app.concurrentPresets {
+				if !autoranOnePreset {
+					autoranOnePreset = true
+				} else {
+					log.Warnf("more than 1 preset has autorun enabled, but " +
+						"can't run them all, because `allow_concurrent_presets` is not enabled.")
+					break
+				}
+			}
+			app.startPresetCh <- i
+		}
+	}
+}
+
 func (t *SystrayApp) indexFromPresetName(presetName string) (int, error) {
 	for i, p := range t.presets {
 		if p.PresetName == presetName {
 			return i, nil
 		}
 	}
-	return 0, fmt.Errorf("not found")
+	return 0, fmt.Errorf("preset with the specified name doesn't exist")
 }
 
 func (t *SystrayApp) isAnyPresetRunning() bool {
@@ -297,7 +325,7 @@ func (t *SystrayApp) setStatus(presetIndex int, status KanataStatus) {
 	t.mPresets[presetIndex].SetTitle(t.presets[presetIndex].Title(status))
 }
 
-// Cancels (stops) preset at given index.
+// Cancels (stops) preset at given index, releasing immediately (non-blocking).
 func (t *SystrayApp) cancel(presetIndex int) {
 	cancel := t.presetCancelFuncs[presetIndex]
 	if cancel != nil {

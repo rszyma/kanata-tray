@@ -44,6 +44,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 ) error {
 	if kanataExecutable == "" {
 		var err error
+		// FIXME: kanata.exe on Windows?
 		kanataExecutable, err = exec.LookPath("kanata")
 		if err != nil {
 			return err
