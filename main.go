@@ -12,9 +12,10 @@ import (
 	"github.com/labstack/gommon/log"
 	"github.com/spf13/pflag"
 
-	"github.com/rszyma/kanata-tray/app"
+	app_pkg "github.com/rszyma/kanata-tray/app"
+	"github.com/rszyma/kanata-tray/app/controlserver"
 	"github.com/rszyma/kanata-tray/config"
-	"github.com/rszyma/kanata-tray/runner"
+	runner_pkg "github.com/rszyma/kanata-tray/runner"
 	"github.com/rszyma/kanata-tray/status_icons"
 )
 
@@ -161,11 +162,11 @@ func mainImpl() error {
 	if err != nil {
 		return fmt.Errorf("loading config failed: %v", err)
 	}
-	menuTemplate, err := app.MenuTemplateFromConfig(*cfg)
+	menuTemplate, err := app_pkg.MenuTemplateFromConfig(*cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create menu from config: %v", err)
 	}
-	layerIcons := app.ResolveIcons(configFolder, cfg)
+	layerIcons := app_pkg.ResolveIcons(configFolder, cfg)
 
 	err = status_icons.CreateDefaultStatusIconsDirIfNotExists(configFolder)
 	if err != nil {
@@ -176,10 +177,10 @@ func mainImpl() error {
 		return fmt.Errorf("LoadCustomStatusIcons: %v", err)
 	}
 
-	runner := runner.NewRunner()
+	runner := runner_pkg.NewRunner()
 
 	onReady := func() {
-		app := app.NewSystrayApp(app.Opts{
+		app := app_pkg.NewSystrayApp(app_pkg.Opts{
 			MenuTemplate:           menuTemplate,
 			LayerIcons:             layerIcons,
 			AllowConcurrentPresets: cfg.General.AllowConcurrentPresets,
@@ -187,6 +188,13 @@ func mainImpl() error {
 		})
 
 		go app.StartProcessingLoop(runner, configFolder)
+
+		go func() {
+			err = controlserver.RunControlServer(app, 8100)
+			log.Errorf("app.RunControlServer failed: %v", err)
+		}()
+
+		app.Autorun()
 	}
 
 	onExit := func() {
