@@ -9,3 +9,4 @@ result
 *.kbd
 kanata-tray.*toml*
 /kanata
+!default_config.toml

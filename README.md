@@ -42,17 +42,21 @@ An example of customized configuration file:
 '$schema' = 'https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json'
 
 [general]
-allow_concurrent_presets = false
+allow_concurrent_presets = false # (default: false)
+
+# Optional TCP control server to listen for remote commands, such as stopping/starting a preset.
+# Reference: https://github.com/rszyma/kanata-tray/blob/main/doc/control_server.md
+control_server_enable = true # (default: false)
 
 [defaults]
 kanata_executable = '~/bin/kanata' # if empty or omitted, system $PATH will be searched.
 kanata_config = '' # if empty or not omitted, kanata default config locations will be used.
-tcp_port = 5829 # if not specified, defaults to 5829
-autorestart_on_crash = true # default: false
+tcp_port = 5829 # (default: 5829)
+autorestart_on_crash = true # (default: false)
 
 [defaults.hooks]
 # Hooks allow running custom commands on specific events (e.g. starting preset).
-# Documentation: https://github.com/rszyma/kanata-tray/blob/main/doc/hooks.md
+# Reference: https://github.com/rszyma/kanata-tray/blob/main/doc/hooks.md
 
 [defaults.layer_icons]
 mouse = 'mouse.png'

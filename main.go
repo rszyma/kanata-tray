@@ -12,22 +12,23 @@ import (
 	"github.com/labstack/gommon/log"
 	"github.com/spf13/pflag"
 
-	"github.com/rszyma/kanata-tray/app"
+	app_pkg "github.com/rszyma/kanata-tray/app"
+	"github.com/rszyma/kanata-tray/app/controlserver"
 	"github.com/rszyma/kanata-tray/config"
-	"github.com/rszyma/kanata-tray/runner"
+	runner_pkg "github.com/rszyma/kanata-tray/runner"
 	"github.com/rszyma/kanata-tray/status_icons"
 )
 
 var (
-	buildVersion string = "not set"
-	buildHash    string = "not set"
-	buildDate    string = "not set"
+	buildVersion string = "not_set"
+	buildHash    string = "not_set"
+	buildDate    string = "not_set"
 )
 
 var (
-	logLevel = pflag.Uint("log-level", uint(log.INFO), "Set log level for kanata-tray (1-debug, 2-info, 3-warn) (note: doesn't affect kanata logging level)")
-	version  = pflag.Bool("version", false, "Print the version and exit")
-	help     = pflag.Bool("help", false, "Print help and exit")
+	logLevel = pflag.Uint("log-level", uint(log.INFO), "Set log level for kanata-tray (1-debug, 2-info, 3-warn) (NOTE: doesn't affect kanata logging level).")
+	version  = pflag.Bool("version", false, "Print the version and exit.")
+	help     = pflag.Bool("help", false, "Print help and exit.")
 )
 
 const (
@@ -144,6 +145,8 @@ func mainImpl() error {
 		log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 	}
 
+	log.Infof("kanata-tray [version=%s, commit=%s, build_date=%s] starting", buildVersion, buildHash, buildDate)
+
 	configFolder := figureOutConfigDir()
 	log.Infof("kanata-tray config folder: %s", configFolder)
 
@@ -159,13 +162,13 @@ func mainImpl() error {
 
 	cfg, err := config.ReadConfigOrCreateIfNotExist(filepath.Join(configFolder, configFileName))
 	if err != nil {
-		return fmt.Errorf("loading config failed: %v", err)
+		return fmt.Errorf("ReadConfigOrCreateIfNotExist failed: %v", err)
 	}
-	menuTemplate, err := app.MenuTemplateFromConfig(*cfg)
+	menuTemplate, err := app_pkg.MenuTemplateFromConfig(*cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create menu from config: %v", err)
 	}
-	layerIcons := app.ResolveIcons(configFolder, cfg)
+	layerIcons := app_pkg.ResolveIcons(configFolder, cfg)
 
 	err = status_icons.CreateDefaultStatusIconsDirIfNotExists(configFolder)
 	if err != nil {
@@ -176,10 +179,10 @@ func mainImpl() error {
 		return fmt.Errorf("LoadCustomStatusIcons: %v", err)
 	}
 
-	runner := runner.NewRunner()
+	runner := runner_pkg.NewRunner()
 
 	onReady := func() {
-		app := app.NewSystrayApp(app.Opts{
+		app := app_pkg.NewSystrayApp(app_pkg.Opts{
 			MenuTemplate:           menuTemplate,
 			LayerIcons:             layerIcons,
 			AllowConcurrentPresets: cfg.General.AllowConcurrentPresets,
@@ -187,6 +190,15 @@ func mainImpl() error {
 		})
 
 		go app.StartProcessingLoop(runner, configFolder)
+
+		if cfg.General.ControlServerEnable {
+			go func() {
+				err = controlserver.RunControlServer(app, cfg.General.ControlServerPort)
+				log.Errorf("app.RunControlServer failed: %v", err)
+			}()
+		}
+
+		app.Autorun()
 	}
 
 	onExit := func() {

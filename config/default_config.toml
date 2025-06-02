@@ -1,0 +1,23 @@
+# For help with configuration see https://github.com/rszyma/kanata-tray/blob/main/README.md
+"$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json"
+
+[general]
+allow_concurrent_presets = false
+control_server_enable = false
+control_server_port = 8100
+
+[defaults]
+tcp_port = 5829
+autorestart_on_crash = false
+
+[defaults.hooks]
+# Hooks allow running custom commands on specific events (e.g. when starting preset).
+# Documentation: https://github.com/rszyma/kanata-tray/blob/main/doc/hooks.md
+
+[defaults.layer_icons]
+
+
+[presets.'Default Preset']
+kanata_executable = ''
+kanata_config = ''
+autorun = false
