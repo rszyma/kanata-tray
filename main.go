@@ -150,14 +150,15 @@ func mainImpl() error {
 	configFolder := figureOutConfigDir()
 	log.Infof("kanata-tray config folder: %s", configFolder)
 
-	err = os.Chdir(configFolder)
-	if err != nil {
-		return fmt.Errorf("failed to change dir: %v", err)
-	}
-
+	// Create <configFolder> and <configFolder>/icons if needed.
 	err = os.MkdirAll(filepath.Join(configFolder, "icons"), os.ModePerm)
 	if err != nil {
-		return fmt.Errorf("failed to create folder: %v", err)
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
+
+	err = os.Chdir(configFolder)
+	if err != nil {
+		return fmt.Errorf("failed to change directory: %v", err)
 	}
 
 	cfg, err := config.ReadConfigOrCreateIfNotExist(filepath.Join(configFolder, configFileName))
