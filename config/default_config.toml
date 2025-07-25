@@ -1,4 +1,4 @@
-# For help with configuration see https://github.com/rszyma/kanata-tray/blob/main/README.md
+# For help with configuration see https://github.com/rszyma/kanata-tray/blob/main/README.md#configuration
 "$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json"
 
 [general]
