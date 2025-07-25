@@ -51,13 +51,17 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		}
 	}
 
-	cfgArg := ""
+	allArgs := []string{}
+
 	if kanataConfig != "" {
-		cfgArg = "-c=" + kanataConfig
+		allArgs = append(allArgs, "-c", kanataConfig)
 	}
 
-	args := append([]string{cfgArg, "--port", fmt.Sprint(tcpPort)}, extraArgs...)
-	cmd := cmd(ctx, kanataExecutable, args...)
+	allArgs = append(allArgs, "--port", fmt.Sprint(tcpPort))
+
+	allArgs = append(allArgs, extraArgs...)
+
+	cmd := cmd(ctx, kanataExecutable, allArgs...)
 
 	go func() {
 		selfCtx, selfCancel := context.WithCancelCause(ctx)
