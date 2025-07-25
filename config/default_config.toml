@@ -18,6 +18,6 @@ autorestart_on_crash = false
 
 
 [presets.'Default Preset']
-kanata_executable = ''
-kanata_config = ''
-autorun = false
+# kanata_executable = ''
+# kanata_config = ''
+# autorun = true
