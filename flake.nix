@@ -1,6 +1,11 @@
 {
   description = "Flake for kanata-tray";
 
+  nixConfig = {
+    extra-substituters = [ "https://rszyma.cachix.org" ];
+    extra-trusted-public-keys = [ "rszyma.cachix.org-1:L3LKXbrUk+OfUBXj2JjxNrq23Z2BccrgDm/S2r012tg=" ];
+  };
+  
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
