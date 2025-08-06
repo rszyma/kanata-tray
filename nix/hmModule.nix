@@ -25,6 +25,11 @@ in
           default = {
             defaults = {
               kanata_executable = "${self.kanata}/bin/kanata";
+              hooks.cmd_template = [
+                "${pkgs.bash}/bin/bash"
+                "-c"
+                "{}"
+              ];
             };
           };
           example = lib.literalExpression ''
