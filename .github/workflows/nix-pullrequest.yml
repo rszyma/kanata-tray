@@ -9,3 +9,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - run: nix build --print-build-logs
+      - run: nix flake check --all-systems
+      - run: nix fmt -- --ci -v
