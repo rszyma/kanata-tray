@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/labstack/gommon/log"
 )
+
+var hookNum atomic.Int32
 
 // Runs all hooks at the same time, blocking waiting for all of them to finish,
 // or they get killed after short timeout.
@@ -26,9 +29,9 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 	wg := sync.WaitGroup{}
 	wg.Add(len(hooks))
 	errors := make([]error, len(hooks))
-	for i, hook := range hooks {
-		log.Infof("Running %s hook [%d] '%#v'", hookType, i, hook)
-		i := i // fix race condition
+	for _, hook := range hooks {
+		n := hookNum.Add(1)
+		log.Infof("Running %s hook [%d] '%#v'", hookType, n, hook)
 		hook := slices.Clone(hook)
 		go func() {
 			defer wg.Done()
@@ -36,19 +39,19 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
 			if err != nil {
-				errors[i] = fmt.Errorf("failed to run %s hook [%d]: %v", hookType, i, err)
+				errors[n] = fmt.Errorf("failed to run %s hook [%d]: %v", hookType, n, err)
 				return
 			}
 			err = cmd.Wait()
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil && ctxErr == context.DeadlineExceeded {
-					errors[i] = fmt.Errorf("hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)", i, timeout)
+					errors[n] = fmt.Errorf("hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)", n, timeout)
 				} else {
-					errors[i] = fmt.Errorf("hook [%d] failed with an error: %v", i, err)
+					errors[n] = fmt.Errorf("hook [%d] failed with an error: %v", n, err)
 				}
 				return
 			}
-			log.Infof("%s [%d] exited OK", hookType, i)
+			log.Infof("%s [%d] exited OK", hookType, n)
 		}()
 	}
 	wg.Wait()
@@ -71,15 +74,15 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 		wg.Wait()
 		allHooksExitedCh <- struct{}{}
 	}()
-	for i, hook := range hooks {
-		log.Infof("Running %s hook [%d] '%#v'", hookType, i, hook)
-		i := i                     // fix race condition
+	for _, hook := range hooks {
+		n := hookNum.Add(1)
+		log.Infof("Running %s hook [%d] '%#v'", hookType, n, hook)
 		hook := slices.Clone(hook) // fix race condition
 		cmd := cmd(ctx, nil, nil, hook[0], hook[1:]...)
 		// TODO: capture stdout/stderr?
 		err := cmd.Start()
 		if err != nil {
-			log.Errorf("Failed to run %s hook [%d]: %v", hookType, i, err)
+			log.Errorf("Failed to run %s hook [%d]: %v", hookType, n, err)
 			return err
 		}
 		go func() {
@@ -87,9 +90,9 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 			err := cmd.Wait()
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
-					log.Warnf("hook [%d] was killed because of cancel signal: %v", i, ctxErr)
+					log.Warnf("hook [%d] was killed because of cancel signal: %v", n, ctxErr)
 				} else {
-					log.Errorf("Hook [%d] failed with an error: %v", i, err)
+					log.Errorf("Hook [%d] failed with an error: %v", n, err)
 				}
 				if !anyHookErrored {
 					anyHookErrored = true
@@ -97,7 +100,7 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 				}
 				return
 			}
-			log.Infof("%s [%d] exited OK", hookType, i)
+			log.Infof("%s [%d] exited OK", hookType, n)
 		}()
 	}
 	return nil
