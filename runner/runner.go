@@ -3,12 +3,15 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/rszyma/kanata-tray/config"
-	"github.com/rszyma/kanata-tray/runner/kanata"
+	"github.com/rszyma/kanata-tray/os_specific"
 	"github.com/rszyma/kanata-tray/runner/tcp_client"
 )
 
@@ -25,7 +28,7 @@ type Runner struct {
 	// Maps preset names to runner indices in `runnerPool` and contexts in `instanceWatcherCtxs`.
 	activeKanataInstances map[string]int
 	// Number of items in channel denotes the number of running kanata instances.
-	kanataInstancePool  []*kanata.Kanata
+	kanataInstancePool  []*Kanata
 	instanceWatcherCtxs []context.Context
 	// Need to have mutex to ensure values in `kanataInstancePool` are not being overwritten
 	// while a value from `activeKanataInstances` is still "borrowed".
@@ -40,7 +43,7 @@ func NewRunner() *Runner {
 		serverMessageCh:       make(chan ItemAndPresetName[tcp_client.ServerMessage]),
 		clientMessageChannels: make(map[string]chan tcp_client.ClientMessage),
 		activeKanataInstances: make(map[string]int),
-		kanataInstancePool:    []*kanata.Kanata{},
+		kanataInstancePool:    []*Kanata{},
 		instanceWatcherCtxs:   []context.Context{},
 		runnersLimit:          activeInstancesLimit,
 	}
@@ -88,7 +91,7 @@ func (r *Runner) Run(ctx context.Context, presetName string, kanataExecutable st
 		if len(r.activeKanataInstances) >= r.runnersLimit {
 			return fmt.Errorf("active instances limit exceeded")
 		}
-		r.kanataInstancePool = append(r.kanataInstancePool, kanata.NewKanataInstance())
+		r.kanataInstancePool = append(r.kanataInstancePool, NewKanata())
 		instanceIndex = len(r.kanataInstancePool) - 1
 	}
 
@@ -157,4 +160,18 @@ func (r *Runner) RetCh() <-chan ItemAndPresetName[error] {
 
 func (r *Runner) ServerMessageCh() <-chan ItemAndPresetName[tcp_client.ServerMessage] {
 	return r.serverMessageCh
+}
+
+func cmd(ctx context.Context, stdout io.Writer, stderr io.Writer, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = 3 * time.Second
+	cmd.SysProcAttr = os_specific.ProcessAttr
+	// cmd.Stdin = os.Stdin
+	if stdout != nil {
+		cmd.Stdout = stdout
+	}
+	if stdout != nil {
+		cmd.Stderr = stderr
+	}
+	return cmd
 }

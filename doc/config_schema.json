@@ -31,6 +31,13 @@
                 "hooks": {
                     "type": "object",
                     "properties": {
+                        "cmd_template": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "A command template for all hooks. It must contain exactly 1 occurence of `{}`, which will be replaced with hook command."
+                        },
                         "pre-start": {
                             "type": "array",
                             "items": {

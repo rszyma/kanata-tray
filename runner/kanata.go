@@ -1,18 +1,15 @@
-package kanata
+package runner
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"slices"
-	"sync"
 	"time"
 
 	"github.com/labstack/gommon/log"
 
 	"github.com/rszyma/kanata-tray/config"
-	"github.com/rszyma/kanata-tray/os_specific"
 	"github.com/rszyma/kanata-tray/runner/tcp_client"
 )
 
@@ -29,7 +26,7 @@ type Kanata struct {
 	tcpClient *tcp_client.KanataTcpClient
 }
 
-func NewKanataInstance() *Kanata {
+func NewKanata() *Kanata {
 	return &Kanata{
 		processSlotCh: make(chan struct{}, 1),
 
@@ -61,7 +58,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 
 	allArgs = append(allArgs, extraArgs...)
 
-	cmd := cmd(ctx, kanataExecutable, allArgs...)
+	cmd := cmd(ctx, nil, nil, kanataExecutable, allArgs...)
 
 	go func() {
 		selfCtx, selfCancel := context.WithCancelCause(ctx)
@@ -82,7 +79,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 
 		err = runAllBlockingHooks(hooks.PreStart, "pre-start")
 		if err != nil {
-			r.retCh <- fmt.Errorf("hook failed: %s", err)
+			r.retCh <- fmt.Errorf("runAllBlockingHooks: %s", err)
 			return
 		}
 
@@ -102,7 +99,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 
 		err = runAllBlockingHooks(hooks.PostStart, "post-start")
 		if err != nil {
-			r.retCh <- fmt.Errorf("hook failed: %s", err)
+			r.retCh <- fmt.Errorf("runAllBlockingHooks: %s", err)
 			return
 		}
 		anyPostStartAsyncHookErroredCh := make(chan error, 1)
@@ -208,107 +205,4 @@ func (r *Kanata) SendClientMessage(msg tcp_client.ClientMessage) error {
 		}
 	}
 	return nil
-}
-
-// Runs all hooks at the same time, blocking waiting for all of them to finish,
-// or they get killed after short timeout.
-//
-// Returns first encountered error within all hook errors.
-//
-// `hookName` - stringified hook type e.g. "pre-start".
-func runAllBlockingHooks(hooks [][]string, hookName string) error {
-	timeout := 5 * time.Second
-	// We don't use ctx from outside, because we want to guarantee
-	// that the hooks finish normally in case of cancel from outside
-	// (e.g. when rapidly switching presets)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	wg := sync.WaitGroup{}
-	wg.Add(len(hooks))
-	errors := make([]error, len(hooks))
-	for i, hook := range hooks {
-		log.Infof("Running %s hook [%d] '%s'", hookName, i, hook)
-		i := i // fix race condition
-		hook := slices.Clone(hook)
-		go func() {
-			defer wg.Done()
-			cmd := cmd(ctx, hook[0], hook[1:]...)
-			// TODO: capture stdout/stderr?
-			err := cmd.Start()
-			if err != nil {
-				errors[i] = fmt.Errorf("failed to run %s hook [%d]: %v", hookName, i, err)
-				return
-			}
-			err = cmd.Wait()
-			if err != nil {
-				if ctxErr := ctx.Err(); ctxErr != nil && ctxErr == context.DeadlineExceeded {
-					errors[i] = fmt.Errorf("hook '%s' [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)", hook, i, timeout)
-				} else {
-					errors[i] = fmt.Errorf("hook '%s' [%d] failed with an error: %v", hook, i, err)
-				}
-				return
-			}
-			log.Infof("%s [%d] exited OK", hookName, i)
-		}()
-	}
-	wg.Wait()
-	for _, err := range errors {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// `hookName` - stringified hook type e.g. "pre-start".
-//
-// Returns an error if any error ocurred during startup of any hook.
-func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookName string, anyHookErroredCh chan<- error, allHooksExitedCh chan<- struct{}) error {
-	anyHookErrored := false
-	wg := sync.WaitGroup{}
-	wg.Add(len(hooks))
-	go func() {
-		wg.Wait()
-		allHooksExitedCh <- struct{}{}
-	}()
-	for i, hook := range hooks {
-		log.Infof("Running %s hook [%d] '%s'", hookName, i, hook)
-		i := i                     // fix race condition
-		hook := slices.Clone(hook) // fix race condition
-		cmd := cmd(ctx, hook[0], hook[1:]...)
-		// TODO: capture stdout/stderr?
-		err := cmd.Start()
-		if err != nil {
-			log.Errorf("Failed to run %s hook [%d]: %v", hookName, i, err)
-			return err
-		}
-		go func() {
-			defer wg.Done()
-			err := cmd.Wait()
-			if err != nil {
-				if ctxErr := ctx.Err(); ctxErr != nil {
-					log.Warnf("hook '%s' [%d] was killed because of cancel signal: %v", hook, i, ctxErr)
-				} else {
-					log.Errorf("Hook '%s' [%d] failed with an error: %v", hook, i, err)
-				}
-				if !anyHookErrored {
-					anyHookErrored = true
-					anyHookErroredCh <- err
-				}
-				return
-			}
-			log.Infof("%s [%d] exited OK", hookName, i)
-		}()
-	}
-	return nil
-}
-
-func cmd(ctx context.Context, name string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.WaitDelay = 3 * time.Second
-	cmd.SysProcAttr = os_specific.ProcessAttr
-	// cmd.Stderr = os.Stderr
-	// cmd.Stdout = os.Stdout
-	// cmd.Stdin = os.Stdin
-	return cmd
 }
