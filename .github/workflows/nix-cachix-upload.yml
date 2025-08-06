@@ -14,3 +14,5 @@ jobs:
           name: rszyma
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - run: nix build --print-build-logs
+      - run: nix flake check --all-systems
+      - run: nix fmt -- --ci -v
