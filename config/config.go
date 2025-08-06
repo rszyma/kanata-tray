@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/elliotchance/orderedmap/v2"
@@ -148,31 +149,72 @@ type generalConfigOptions struct {
 }
 
 type hooks struct {
-	PreStart       []string `toml:"pre-start"`
+	CmdTemplate    []string `toml:"cmd_template"`
+	PreStart       []string `toml:"pre-start"` // TODO: rename to snake case.
 	PostStart      []string `toml:"post-start"`
 	PostStartAsync []string `toml:"post-start-async"`
 	PostStop       []string `toml:"post-stop"`
 }
 
+type cmdTempl struct {
+	inner [](func(s string) string)
+}
+
+func newCmdTemplFromRaw(cmdTemplate []string) (*cmdTempl, error) {
+	var r = new(cmdTempl)
+	var fmtSeqCount int
+
+	for _, arg := range cmdTemplate {
+		fmtSeqCount += strings.Count(arg, "{}")
+		arg := arg
+		r.inner = append(r.inner, func(s string) string {
+			return strings.ReplaceAll(arg, "{}", s)
+		})
+	}
+
+	if fmtSeqCount != 1 {
+		return nil, fmt.Errorf(
+			"expected exactly one occurence of {}, found %d",
+			fmtSeqCount,
+		)
+	}
+
+	return r, nil
+}
+
+func (t *cmdTempl) apply(s string) (finalArgv []string) {
+	for _, fn := range t.inner {
+		finalArgv = append(finalArgv, fn(s))
+	}
+	return finalArgv
+}
+
+func (t *cmdTempl) applyMany(xs []string) [][]string {
+	var results [][]string
+	for _, x := range xs {
+		results = append(results, t.apply(x))
+	}
+	return results
+}
+
 func (p *hooks) intoExported() (*Hooks, error) {
-	parseResults := make([][][]string, 0, 4)
-	hookLists := [][]string{p.PreStart, p.PostStart, p.PostStartAsync, p.PostStop}
-	for _, hooks := range hookLists {
-		parsedHooksOfOneKind := [][]string{}
-		for _, hook := range hooks {
-			args, err := parseCmd(hook)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse hook command '%s': %s", hook, err)
-			}
-			parsedHooksOfOneKind = append(parsedHooksOfOneKind, args)
+	cmdTemplate := p.CmdTemplate
+	if cmdTemplate == nil {
+		if runtime.GOOS == "windows" {
+			cmdTemplate = []string{"{}"} // TODO: better default? maybe powershell?
+		} else {
+			cmdTemplate = []string{"/bin/sh", "-c", "{}"}
 		}
-		parseResults = append(parseResults, parsedHooksOfOneKind)
+	}
+	templ, err := newCmdTemplFromRaw(cmdTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parsing cmd_template: %w", err)
 	}
 	return &Hooks{
-		PreStart:       parseResults[0],
-		PostStart:      parseResults[1],
-		PostStartAsync: parseResults[2],
-		PostStop:       parseResults[3],
+		PreStart:       templ.applyMany(p.PreStart),
+		PostStart:      templ.applyMany(p.PostStart),
+		PostStartAsync: templ.applyMany(p.PostStartAsync),
+		PostStop:       templ.applyMany(p.PostStop),
 	}, nil
 }
 
@@ -345,62 +387,4 @@ func (m *OrderedMap[K, V]) GoString() string {
 	}
 	builder.WriteString("\n}")
 	return builder.String()
-}
-
-func parseCmd(cmdWithArgs string) ([]string, error) {
-	result := []string{}
-	level2_start_chars := []rune{'\'', '"'}
-	builder := strings.Builder{}
-	var level2_start rune = rune(0)
-	for _, char := range cmdWithArgs {
-		if level2_start != rune(0) {
-			if char == level2_start {
-				result = append(result, builder.String())
-				builder.Reset()
-				level2_start = rune(0)
-				continue
-			}
-			builder.WriteRune(char)
-			continue
-		}
-		// is on level 1
-
-		if char == ' ' {
-			result = append(result, builder.String())
-			builder.Reset()
-			continue
-		}
-
-		for _, c := range level2_start_chars {
-			if char == c {
-				result = append(result, builder.String())
-				builder.Reset()
-				level2_start = char
-				break
-			}
-		}
-		if level2_start != rune(0) {
-			continue
-		}
-
-		builder.WriteRune(char)
-	}
-
-	switch level2_start {
-	case rune(0):
-		// all good
-	case '\'':
-		return nil, fmt.Errorf("unclosed single-quote character")
-	case '"':
-		return nil, fmt.Errorf("unclosed quote character")
-	default:
-		panic("unreachable")
-	}
-
-	leftover := builder.String()
-	if len(leftover) != 0 {
-		result = append(result, leftover)
-	}
-
-	return result, nil
 }
