@@ -3,7 +3,9 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,7 +37,13 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 		hook := slices.Clone(hook)
 		go func() {
 			defer wg.Done()
-			cmd := cmd(ctx, nil, nil, hook[0], hook[1:]...)
+			cmd := cmd(
+				ctx,
+				makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&1"),
+				makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&2"),
+				hook[0],
+				hook[1:]...,
+			)
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
 			if err != nil {
@@ -78,7 +86,13 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 		n := hookNum.Add(1)
 		log.Infof("Running %s hook [%d] '%#v'", hookType, n, hook)
 		hook := slices.Clone(hook) // fix race condition
-		cmd := cmd(ctx, nil, nil, hook[0], hook[1:]...)
+		cmd := cmd(
+			ctx,
+			makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&1"),
+			makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&2"),
+			hook[0],
+			hook[1:]...,
+		)
 		// TODO: capture stdout/stderr?
 		err := cmd.Start()
 		if err != nil {
@@ -104,4 +118,26 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 		}()
 	}
 	return nil
+}
+
+func makeLogWrapWriter(prefixes ...string) io.Writer {
+	var prefixesFormatted string
+	for _, prefix := range prefixes {
+		prefixesFormatted = fmt.Sprintf("%s[%s]", prefixesFormatted, prefix)
+	}
+	return &writerFunc{func(p []byte) (int, error) {
+		s := strings.Trim(string(p), "\n")
+		if len(s) > 0 {
+			log.Debugf("%s %s", prefixesFormatted, s)
+		}
+		return len(p), nil
+	}}
+}
+
+type writerFunc struct {
+	writeFunc func(p []byte) (int, error)
+}
+
+func (w *writerFunc) Write(p []byte) (int, error) {
+	return w.writeFunc(p)
 }
