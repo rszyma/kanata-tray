@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 
 	"github.com/getlantern/systray"
 	"github.com/kirsle/configdir"
@@ -182,30 +184,36 @@ func mainImpl() error {
 
 	runner := runner_pkg.NewRunner()
 
+	app := app_pkg.NewSystrayApp(app_pkg.Opts{
+		MenuTemplate:           menuTemplate,
+		LayerIcons:             layerIcons,
+		AllowConcurrentPresets: cfg.General.AllowConcurrentPresets,
+		LogFilepath:            logFilepath,
+	})
+
 	onReady := func() {
-		app := app_pkg.NewSystrayApp(app_pkg.Opts{
-			MenuTemplate:           menuTemplate,
-			LayerIcons:             layerIcons,
-			AllowConcurrentPresets: cfg.General.AllowConcurrentPresets,
-			LogFilepath:            logFilepath,
-		})
-
+		app.InitSystray()
 		go app.StartProcessingLoop(runner, configFolder)
-
 		if cfg.General.ControlServerEnable {
 			go func() {
 				err = controlserver.RunControlServer(app, cfg.General.ControlServerPort)
 				log.Errorf("app.RunControlServer failed: %v", err)
 			}()
 		}
-
 		app.Autorun()
 	}
 
-	onExit := func() {
-		log.Printf("Exiting")
-	}
+	sigCh := make(chan os.Signal, 10)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	systray.Run(onReady, onExit)
+	go func() {
+		sig := <-sigCh
+		log.Infof("Received exit signal (%s)", sig)
+		app.Cleanup()
+		os.Exit(1)
+	}()
+
+	systray.Run(onReady, nil)
+
 	return nil
 }

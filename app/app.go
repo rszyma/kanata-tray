@@ -58,103 +58,109 @@ type Opts struct {
 }
 
 func NewSystrayApp(opts Opts) *SystrayApp {
-	systray.SetIcon(status_icons.Default)
-	systray.SetTooltip("kanata-tray")
-
-	t := &SystrayApp{
+	return &SystrayApp{
 		logFilepath:          opts.LogFilepath,
 		presets:              opts.MenuTemplate,
 		scheduledPresetIndex: -1,
 		layerIcons:           opts.LayerIcons,
 		concurrentPresets:    opts.AllowConcurrentPresets,
 	}
+}
 
-	for _, entry := range opts.MenuTemplate {
+func (a *SystrayApp) InitSystray() *SystrayApp {
+	if a == nil || a.scheduledPresetIndex != -1 {
+		panic("InitSystray must be called on a freshly created instance")
+	}
+
+	systray.SetIcon(status_icons.Default)
+	systray.SetTooltip("kanata-tray")
+
+	for _, entry := range a.presets {
 		menuItem := systray.AddMenuItem(entry.Title(statusIdle), entry.Tooltip())
 		if !entry.IsSelectable {
 			menuItem.Disable()
 		}
-		t.mPresets = append(t.mPresets, menuItem)
+		a.mPresets = append(a.mPresets, menuItem)
 
 		statusItem := menuItem.AddSubMenuItem(string(statusIdle), "kanata status for this preset")
-		t.mPresetStatuses = append(t.mPresetStatuses, statusItem)
-		t.statuses = append(t.statuses, statusIdle)
+		a.mPresetStatuses = append(a.mPresetStatuses, statusItem)
+		a.statuses = append(a.statuses, statusIdle)
 
-		t.presetCancelFuncs = append(t.presetCancelFuncs, nil)
+		a.presetCancelFuncs = append(a.presetCancelFuncs, nil)
 
 		openLogsItem := menuItem.AddSubMenuItem("Open kanata logs", "Open kanata log file")
-		t.mPresetLogs = append(t.mPresetLogs, openLogsItem)
+		a.mPresetLogs = append(a.mPresetLogs, openLogsItem)
 
-		t.presetAutorestartLimiter = append(t.presetAutorestartLimiter, RestartLimiter{})
+		a.presetAutorestartLimiter = append(a.presetAutorestartLimiter, RestartLimiter{})
 
-		t.presetLogFiles = append(t.presetLogFiles, nil)
+		a.presetLogFiles = append(a.presetLogFiles, nil)
 	}
 
 	systray.AddSeparator()
 
-	t.mOptions = systray.AddMenuItem("Configure", "Reveals kanata-tray config file")
-	t.mShowLogs = systray.AddMenuItem("Open logs", "Reveals kanata-tray log file")
-	t.mQuit = systray.AddMenuItem("Exit tray", "Closes kanata (if running) and exits the tray")
+	a.mOptions = systray.AddMenuItem("Configure", "Reveals kanata-tray config file")
+	a.mShowLogs = systray.AddMenuItem("Open logs", "Reveals kanata-tray log file")
+	a.mQuit = systray.AddMenuItem("Exit tray", "Closes kanata (if running) and exits the tray")
 
-	t.togglePresetCh = multipleMenuItemsClickListener(t.mPresetStatuses)
-	t.startPresetCh = make(chan int)
-	t.stopPresetChan = make(chan int)
-	t.openPresetLogsCh = multipleMenuItemsClickListener(t.mPresetLogs)
+	a.togglePresetCh = multipleMenuItemsClickListener(a.mPresetStatuses)
+	a.startPresetCh = make(chan int)
+	a.stopPresetChan = make(chan int)
+	a.openPresetLogsCh = multipleMenuItemsClickListener(a.mPresetLogs)
 
-	return t
+	return a
 }
 
-func (t *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
-	if !t.concurrentPresets && t.isAnyPresetRunning() {
-		log.Infof("Switching preset to '%s'", t.presets[presetIndex].PresetName)
-		for i := range t.presets {
-			t.cancel(i)
-			t.setStatus(i, statusIdle)
+func (a *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
+	if !a.concurrentPresets && a.isAnyPresetRunning() {
+		log.Infof("Switching preset to '%s'", a.presets[presetIndex].PresetName)
+		for i := range a.presets {
+			a.cancel(i)
+			a.setStatus(i, statusIdle)
 		}
-		if t.scheduledPresetIndex != -1 {
+		if a.scheduledPresetIndex != -1 {
 			log.Warnf("the previously scheduled preset was not ran!")
 		}
-		t.scheduledPresetIndex = presetIndex
+		a.scheduledPresetIndex = presetIndex
 		// Preset has been scheduled to run, and will actutally be run when the previous one exits.
 		return
 	}
 
-	log.Infof("Running preset '%s'", t.presets[presetIndex].PresetName)
-	t.setStatus(presetIndex, statusStarting)
+	log.Infof("Running preset '%s'", a.presets[presetIndex].PresetName)
+	a.setStatus(presetIndex, statusStarting)
 
-	t.presetLogFiles[presetIndex].Close()
+	a.presetLogFiles[presetIndex].Close()
 	var err error
-	t.presetLogFiles[presetIndex], err = os.CreateTemp("", "kanata_lastrun_*.log")
+	a.presetLogFiles[presetIndex], err = os.CreateTemp("", "kanata_lastrun_*.log")
 	if err != nil {
 		log.Errorf("failed to create temp log file: %v", err)
-		t.setStatus(presetIndex, statusCrashed)
+		a.setStatus(presetIndex, statusCrashed)
 		return
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	err = runner.Run(
 		ctx,
-		t.presets[presetIndex].PresetName,
-		t.presets[presetIndex].Preset.KanataExecutable,
-		t.presets[presetIndex].Preset.KanataConfig,
-		t.presets[presetIndex].Preset.TcpPort,
-		t.presets[presetIndex].Preset.Hooks,
-		t.presets[presetIndex].Preset.ExtraArgs,
-		t.presetLogFiles[presetIndex],
+		a.presets[presetIndex].PresetName,
+		a.presets[presetIndex].Preset.KanataExecutable,
+		a.presets[presetIndex].Preset.KanataConfig,
+		a.presets[presetIndex].Preset.TcpPort,
+		a.presets[presetIndex].Preset.Hooks,
+		a.presets[presetIndex].Preset.ExtraArgs,
+		a.presetLogFiles[presetIndex],
 	)
 	if err != nil {
 		log.Errorf("runner.Run failed with: %v", err)
-		t.setStatus(presetIndex, statusCrashed)
+		a.setStatus(presetIndex, statusCrashed)
 		cancel()
 		return
 	}
-	t.cancel(presetIndex)
-	t.setStatus(presetIndex, statusRunning)
-	t.presetCancelFuncs[presetIndex] = cancel
+	a.cancel(presetIndex)
+	a.setStatus(presetIndex, statusRunning)
+	a.presetCancelFuncs[presetIndex] = cancel
 }
 
-func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder string) {
-	app.setIcon(status_icons.Pause)
+func (a *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder string) {
+	a.setIcon(status_icons.Pause)
 
 	serverMessageCh := runner.ServerMessageCh()
 	retCh := runner.RetCh()
@@ -166,14 +172,14 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 
 			// fmt.Printf("Received an event from kanata: %v\n", pp.Sprint(event))
 			if event.Item.LayerChange != nil {
-				icon := app.layerIcons.IconForLayerName(event.PresetName, event.Item.LayerChange.NewLayer)
+				icon := a.layerIcons.IconForLayerName(event.PresetName, event.Item.LayerChange.NewLayer)
 				if icon == nil {
 					icon = status_icons.Default
 				}
-				app.setIcon(icon)
+				a.setIcon(icon)
 			}
 			if event.Item.LayerNames != nil {
-				mappedLayers := app.layerIcons.MappedLayers(event.PresetName)
+				mappedLayers := a.layerIcons.MappedLayers(event.PresetName)
 				for _, mappedLayerName := range mappedLayers {
 					found := slices.Contains(event.Item.LayerNames.Names, mappedLayerName)
 					if !found {
@@ -182,85 +188,85 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				}
 			}
 			if event.Item.ConfigFileReload != nil {
-				prevIcon := app.currentIconData
-				app.setIcon(status_icons.LiveReload)
+				prevIcon := a.currentIconData
+				a.setIcon(status_icons.LiveReload)
 				time.Sleep(150 * time.Millisecond)
-				app.setIcon(prevIcon)
+				a.setIcon(prevIcon)
 			}
 		case ret := <-retCh:
 			runnerPipelineErr := ret.Item
-			i, err := app.indexFromPresetName(ret.PresetName)
+			i, err := a.indexFromPresetName(ret.PresetName)
 			if err != nil {
 				log.Errorf("Preset not found: %s", ret.PresetName)
 				continue
 			}
-			app.cancel(i)
+			a.cancel(i)
 			if runnerPipelineErr != nil {
 				log.Errorf("Kanata runner terminated with an error: %v", runnerPipelineErr)
-				app.setStatus(i, statusCrashed)
-				app.setIcon(status_icons.Crash)
+				a.setStatus(i, statusCrashed)
+				a.setIcon(status_icons.Crash)
 
-				if app.presets[i].Preset.AutorestartOnCrash {
-					attemptCount, isAllowed := app.presetAutorestartLimiter[i].BeginAttempt()
+				if a.presets[i].Preset.AutorestartOnCrash {
+					attemptCount, isAllowed := a.presetAutorestartLimiter[i].BeginAttempt()
 					if isAllowed {
 						log.Infof("[autorestart-on-crash] Restarting [%d/%d]", attemptCount, AutorestartLimit)
-						app.runPreset(i, runner)
+						a.runPreset(i, runner)
 					} else {
 						log.Warnf("[autorestart-on-crash] Restarts have been triggering too rapidly. Stopping futher attempts.")
-						app.presetAutorestartLimiter[i].Clear()
+						a.presetAutorestartLimiter[i].Clear()
 					}
 				}
 			} else {
 				log.Infof("Previous kanata process terminated successfully")
-				app.setStatus(i, statusIdle)
-				if app.isAnyPresetRunning() {
-					app.setIcon(status_icons.Default)
+				a.setStatus(i, statusIdle)
+				if a.isAnyPresetRunning() {
+					a.setIcon(status_icons.Default)
 				} else {
-					app.setIcon(status_icons.Pause)
+					a.setIcon(status_icons.Pause)
 				}
 			}
-			if app.scheduledPresetIndex != -1 {
-				app.runPreset(app.scheduledPresetIndex, runner)
-				app.scheduledPresetIndex = -1
+			if a.scheduledPresetIndex != -1 {
+				a.runPreset(a.scheduledPresetIndex, runner)
+				a.scheduledPresetIndex = -1
 			}
-		case i := <-app.togglePresetCh:
-			switch app.statuses[i] {
+		case i := <-a.togglePresetCh:
+			switch a.statuses[i] {
 			case statusIdle:
 				// run kanata
-				app.runPreset(i, runner)
+				a.runPreset(i, runner)
 			case statusRunning:
 				// stop kanata
-				app.cancel(i)
+				a.cancel(i)
 			case statusCrashed:
 				// restart kanata (from crashed state)
-				app.presetAutorestartLimiter[i].Clear()
-				app.runPreset(i, runner)
+				a.presetAutorestartLimiter[i].Clear()
+				a.runPreset(i, runner)
 			}
-		case i := <-app.stopPresetChan:
-			switch app.statuses[i] {
+		case i := <-a.stopPresetChan:
+			switch a.statuses[i] {
 			case statusIdle:
 				// already not running, do nothing
 			case statusRunning:
 				// stop kanata
-				app.cancel(i)
+				a.cancel(i)
 			case statusCrashed:
 				// already not running, do nothing
 			}
-		case i := <-app.startPresetCh:
-			switch app.statuses[i] {
+		case i := <-a.startPresetCh:
+			switch a.statuses[i] {
 			case statusIdle:
 				// run kanata
-				app.runPreset(i, runner)
+				a.runPreset(i, runner)
 			case statusRunning:
 				// alredy running, do nothing
 			case statusCrashed:
 				// restart kanata (from crashed state)
-				app.presetAutorestartLimiter[i].Clear()
-				app.runPreset(i, runner)
+				a.presetAutorestartLimiter[i].Clear()
+				a.runPreset(i, runner)
 			}
-		case i := <-app.openPresetLogsCh:
-			presetName := app.presets[i].PresetName
-			f := app.presetLogFiles[i]
+		case i := <-a.openPresetLogsCh:
+			presetName := a.presets[i].PresetName
+			f := a.presetLogFiles[i]
 			if f == nil {
 				log.Warnf("No log file found for preset '%s'", presetName)
 			} else {
@@ -268,19 +274,13 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 				log.Debugf("Opening log file for preset '%s': '%s'", presetName, filename)
 				open.Start(filename)
 			}
-		case <-app.mOptions.ClickedCh:
+		case <-a.mOptions.ClickedCh:
 			open.Start(configFolder)
-		case <-app.mShowLogs.ClickedCh:
-			open.Start(app.logFilepath)
-		case <-app.mQuit.ClickedCh:
-			log.Print("Exiting...")
-			for _, cancel := range app.presetCancelFuncs {
-				if cancel != nil {
-					cancel()
-				}
-			}
-			time.Sleep(1 * time.Second)
-			// TODO: ensure all kanata processes stopped?
+		case <-a.mShowLogs.ClickedCh:
+			open.Start(a.logFilepath)
+		case <-a.mQuit.ClickedCh:
+			log.Info("Clicked \"Exit tray button\", exiting.")
+			a.Cleanup()
 			systray.Quit()
 			return
 		}
@@ -288,11 +288,11 @@ func (app *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFold
 }
 
 // Run all presets with autorun=true. NOOP if they are running already.
-func (app *SystrayApp) Autorun() {
+func (a *SystrayApp) Autorun() {
 	autoranOnePreset := false
-	for i, preset := range app.presets {
+	for i, preset := range a.presets {
 		if preset.Preset.Autorun {
-			if !app.concurrentPresets {
+			if !a.concurrentPresets {
 				if !autoranOnePreset {
 					autoranOnePreset = true
 				} else {
@@ -301,13 +301,34 @@ func (app *SystrayApp) Autorun() {
 					break
 				}
 			}
-			app.startPresetCh <- i
+			a.startPresetCh <- i
 		}
 	}
 }
 
-func (t *SystrayApp) indexFromPresetName(presetName string) (int, error) {
-	for i, p := range t.presets {
+func (a *SystrayApp) Cleanup() {
+	deadline := time.Now().Add(6 * time.Second)
+	for time.Now().Before(deadline) {
+		anyIsRunning := false
+		for i := range a.presets {
+			switch a.statuses[i] {
+			case statusRunning, statusStarting:
+				anyIsRunning = true
+				a.cancel(i)
+			case statusIdle, statusCrashed: // noop
+			}
+		}
+		if anyIsRunning {
+			time.Sleep(10 * time.Millisecond)
+		} else {
+			return
+		}
+	}
+	log.Warn("Cleanup deadline exceeded, releasing block")
+}
+
+func (a *SystrayApp) indexFromPresetName(presetName string) (int, error) {
+	for i, p := range a.presets {
 		if p.PresetName == presetName {
 			return i, nil
 		}
@@ -315,27 +336,27 @@ func (t *SystrayApp) indexFromPresetName(presetName string) (int, error) {
 	return 0, fmt.Errorf("preset with the specified name doesn't exist")
 }
 
-func (t *SystrayApp) isAnyPresetRunning() bool {
-	return slices.Contains(t.statuses, statusRunning)
+func (a *SystrayApp) isAnyPresetRunning() bool {
+	return slices.Contains(a.statuses, statusRunning)
 }
 
-func (t *SystrayApp) setStatus(presetIndex int, status KanataStatus) {
-	t.statuses[presetIndex] = status
-	t.mPresetStatuses[presetIndex].SetTitle(string(status))
-	t.mPresets[presetIndex].SetTitle(t.presets[presetIndex].Title(status))
+func (a *SystrayApp) setStatus(presetIndex int, status KanataStatus) {
+	a.statuses[presetIndex] = status
+	a.mPresetStatuses[presetIndex].SetTitle(string(status))
+	a.mPresets[presetIndex].SetTitle(a.presets[presetIndex].Title(status))
 }
 
 // Cancels (stops) preset at given index, releasing immediately (non-blocking).
-func (t *SystrayApp) cancel(presetIndex int) {
-	cancel := t.presetCancelFuncs[presetIndex]
+func (a *SystrayApp) cancel(presetIndex int) {
+	cancel := a.presetCancelFuncs[presetIndex]
 	if cancel != nil {
 		cancel()
 	}
-	t.presetCancelFuncs[presetIndex] = nil
+	a.presetCancelFuncs[presetIndex] = nil
 }
 
-func (t *SystrayApp) setIcon(iconBytes []byte) {
-	t.currentIconData = iconBytes
+func (a *SystrayApp) setIcon(iconBytes []byte) {
+	a.currentIconData = iconBytes
 	systray.SetIcon(iconBytes)
 }
 

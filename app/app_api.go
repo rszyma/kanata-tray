@@ -4,50 +4,50 @@ import (
 	"fmt"
 )
 
-func (app *SystrayApp) StopPreset(presetName string) error {
-	i, err := app.indexFromPresetName(presetName)
+func (a *SystrayApp) StopPreset(presetName string) error {
+	i, err := a.indexFromPresetName(presetName)
 	if err != nil {
 		return fmt.Errorf("app.indexFromPresetName: %v", err)
 	}
-	app.stopPresetChan <- i
+	a.stopPresetChan <- i
 	return nil
 }
 
-func (app *SystrayApp) StopAllPresets() error {
-	for i, status := range app.statuses {
+func (a *SystrayApp) StopAllPresets() error {
+	for i, status := range a.statuses {
 		switch status {
 		case statusRunning, statusStarting:
-			app.stopPresetChan <- i
+			a.stopPresetChan <- i
 		}
 	}
 	return nil
 }
 
-func (app *SystrayApp) StartPreset(presetName string) error {
-	i, err := app.indexFromPresetName(presetName)
+func (a *SystrayApp) StartPreset(presetName string) error {
+	i, err := a.indexFromPresetName(presetName)
 	if err != nil {
 		return fmt.Errorf("app.indexFromPresetName: %v", err)
 	}
-	app.startPresetCh <- i
+	a.startPresetCh <- i
 	return nil
 }
 
-func (app *SystrayApp) StartAllDefaultPresets() error {
-	app.Autorun()
+func (a *SystrayApp) StartAllDefaultPresets() error {
+	a.Autorun()
 	return nil
 }
 
-func (app *SystrayApp) TogglePreset(presetName string) (msg string, err error) {
-	i, err := app.indexFromPresetName(presetName)
+func (a *SystrayApp) TogglePreset(presetName string) (msg string, err error) {
+	i, err := a.indexFromPresetName(presetName)
 	if err != nil {
 		return "", fmt.Errorf("app.indexFromPresetName: %v", err)
 	}
-	switch app.statuses[i] {
+	switch a.statuses[i] {
 	case statusRunning, statusStarting:
-		app.startPresetCh <- i
+		a.startPresetCh <- i
 		return "started", nil
 	case statusIdle, statusCrashed:
-		app.stopPresetChan <- i
+		a.stopPresetChan <- i
 		return "stopped", nil
 	}
 	panic("unreachable")
@@ -55,12 +55,12 @@ func (app *SystrayApp) TogglePreset(presetName string) (msg string, err error) {
 
 // If any default preset is running, stop them.
 // If 0 default presets are running, start all default presets.
-func (app *SystrayApp) ToggleAllDefaultPresets() (msg string, err error) {
+func (a *SystrayApp) ToggleAllDefaultPresets() (msg string, err error) {
 	stoppedPresetsCount := 0
-	for i, preset := range app.presets {
-		status := app.statuses[i]
+	for i, preset := range a.presets {
+		status := a.statuses[i]
 		if preset.Preset.Autorun && (status == statusRunning || status == statusStarting) {
-			app.stopPresetChan <- i
+			a.stopPresetChan <- i
 			stoppedPresetsCount += 1
 		}
 	}
@@ -69,7 +69,7 @@ func (app *SystrayApp) ToggleAllDefaultPresets() (msg string, err error) {
 		return fmt.Sprintf("stopped %d presets", stoppedPresetsCount), nil
 	}
 
-	app.Autorun()
+	a.Autorun()
 
 	return "started all default presets", nil
 }
