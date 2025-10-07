@@ -172,3 +172,9 @@ sudo zypper in libayatana-appindicator3-devel
 Prebuild binaries for Windows and Linux: [releases page](https://github.com/rszyma/kanata-tray/releases/latest)
 
 To build from source see recipes in [justfile](./justfile).
+
+
+## Contributing
+
+Unless explicitly stated otherwise, your contributions to this repository will be made under
+[GNU General Public License v3.0 or later](https://spdx.org/licenses/GPL-3.0-or-later.html) license.
