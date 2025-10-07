@@ -29,7 +29,7 @@ buildGoModule {
   nativeBuildInputs = build-deps;
   buildInputs = runtime-deps ++ [ pkgs.makeWrapper ];
   postInstall = ''
-    wrapProgram $out/bin/kanata-tray --set KANATA_TRAY_LOG_DIR /tmp --prefix PATH : $out/bin
+    wrapProgram $out/bin/kanata-tray --set-default KANATA_TRAY_LOG_DIR /tmp --prefix PATH : $out/bin
   '';
   meta = with pkgs.lib; {
     description = "Tray Icon for Kanata";
