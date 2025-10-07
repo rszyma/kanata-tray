@@ -151,6 +151,7 @@ func mainImpl() error {
 
 	configFolder := figureOutConfigDir()
 	log.Infof("kanata-tray config folder: %s", configFolder)
+	log.Infof("kanata-tray log folder: %s", logDir)
 
 	// Create <configFolder> and <configFolder>/icons if needed.
 	err = os.MkdirAll(filepath.Join(configFolder, "icons"), os.ModePerm)
