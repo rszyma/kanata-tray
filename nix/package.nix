@@ -38,7 +38,7 @@ buildGoModule {
       Works on Windows, Linux and macOS.
     '';
     homepage = "https://github.com/rszyma/kanata-tray";
-    license = licenses.gpl3;
+    license = licenses.gpl3Plus;
     platforms = platforms.unix;
   };
 }
