@@ -19,7 +19,7 @@ in
     {
       programs.kanata-tray = {
         enable = mkEnableOption "kanata-tray";
-        package = mkPackageOption self.packages.${pkgs.system} "kanata-tray" { nullable = true; };
+        package = mkPackageOption self.packages.${hostPlatform.system} "kanata-tray" { nullable = true; };
         settings = mkOption {
           type = tomlFormat.type;
           default = {
