@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/getlantern/systray"
@@ -343,7 +344,8 @@ func (a *SystrayApp) isAnyPresetRunning() bool {
 func (a *SystrayApp) setStatus(presetIndex int, status KanataStatus) {
 	a.statuses[presetIndex] = status
 	a.mPresetStatuses[presetIndex].SetTitle(string(status))
-	a.mPresets[presetIndex].SetTitle(a.presets[presetIndex].Title(status))
+	title := escapeSystrayUnderscoreChars(a.presets[presetIndex].Title(status))
+	a.mPresets[presetIndex].SetTitle(title)
 }
 
 // Cancels (stops) preset at given index, releasing immediately (non-blocking).
@@ -373,4 +375,13 @@ func multipleMenuItemsClickListener(menuItems []*systray.MenuItem) chan int {
 		}()
 	}
 	return ch
+}
+
+func escapeSystrayUnderscoreChars(text string) string {
+	// It seems that the text nodes in the GUI elements created by systray lib
+	// use some kind of markup language, but I don't know what is it.
+	// So far only "_" character was reported to be problematic.
+	// From my latest testing (on linux), 2 underscores escape it to 1.
+	// Issue: https://github.com/rszyma/kanata-tray/issues/8
+	return strings.ReplaceAll(text, "_", "__")
 }
