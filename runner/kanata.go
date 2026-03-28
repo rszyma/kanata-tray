@@ -93,35 +93,26 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 
 		log.Infof("Started kanata (pid=%d)", r.cmd.Process.Pid)
 
-		// Need to wait until kanata boot up and setups the TCP server.
-		// 2000 ms is a default start delay in kanata.
-		time.Sleep(time.Millisecond * 2500)
-
-		err = runAllBlockingHooks(hooks.PostStart, "post-start")
-		if err != nil {
-			r.retCh <- fmt.Errorf("runAllBlockingHooks: %s", err)
-			return
-		}
-		anyPostStartAsyncHookErroredCh := make(chan error, 1)
-		allPostStartAsyncHooksExitedCh := make(chan struct{}, 1)
-		err = runAllAsyncHooks(selfCtx, hooks.PostStartAsync, "post-start-async", anyPostStartAsyncHookErroredCh, allPostStartAsyncHooksExitedCh)
-		if err != nil {
-			r.retCh <- fmt.Errorf("hook failed: %s", err)
-			return
-		}
-
-		go func() {
-			select {
-			case <-selfCtx.Done():
-				return
-			case err := <-anyPostStartAsyncHookErroredCh:
-				log.Errorf("An async hook errored, stopping preset.")
-				selfCancel(err)
+		// Short poll for kanata tcp server to be up.
+		// Default wait time in kanata is 2000ms, but can be disabled with --nodelay, so hardcoding delay here is not good.
+		online := false
+		deadline := time.Now().Add(time.Millisecond * 5000)
+		for time.Now().Before(deadline) {
+			ctx, cancel := context.WithTimeout(selfCtx, 25*time.Millisecond)
+			err := r.tcpClient.Connect(ctx, tcpPort)
+			if err == nil {
+				online = true
+				defer cancel() // yes, this is a defer in a for loop. It should clean up only after the whole function returns.
+				break
 			}
-		}()
+			cancel()
+			time.Sleep(25 * time.Millisecond)
+		}
+		if !online {
+			log.Errorf("Waiting for kanata TCP server timed out. Bug?")
+		}
 
 		go func() {
-			r.tcpClient.Reconnect <- struct{}{} // this shoudn't block, because reconnect chan should have 1-len buffer
 			// Loop in order to reconnect when kanata disconnects us.
 			// We might be disconnected if an older version of kanata is used.
 			for {
@@ -145,6 +136,29 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			log.Errorf("Failed to send ClientMessage: %v", err)
 			// this is non-critical, so we continue
 		}
+
+		err = runAllBlockingHooks(hooks.PostStart, "post-start")
+		if err != nil {
+			r.retCh <- fmt.Errorf("runAllBlockingHooks: %s", err)
+			return
+		}
+		anyPostStartAsyncHookErroredCh := make(chan error, 1)
+		allPostStartAsyncHooksExitedCh := make(chan struct{}, 1)
+		err = runAllAsyncHooks(selfCtx, hooks.PostStartAsync, "post-start-async", anyPostStartAsyncHookErroredCh, allPostStartAsyncHooksExitedCh)
+		if err != nil {
+			r.retCh <- fmt.Errorf("hook failed: %s", err)
+			return
+		}
+
+		go func() {
+			select {
+			case <-selfCtx.Done():
+				return
+			case err := <-anyPostStartAsyncHookErroredCh:
+				log.Errorf("An async hook errored, stopping preset.")
+				selfCancel(err)
+			}
+		}()
 
 		cmdErr := r.cmd.Wait() // block until kanata exits
 		r.cmd = nil
