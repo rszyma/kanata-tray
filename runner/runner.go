@@ -53,8 +53,16 @@ func NewRunner() *Runner {
 // Calling Run when there's a previous preset running with the the same
 // presetName will block until the previous process finishes.
 // To stop running preset, caller needs to cancel ctx.
-func (r *Runner) Run(ctx context.Context, presetName string, kanataExecutable string,
-	kanataConfig string, tcpPort int, hooks config.Hooks, extraArgs []string, kanataLogFile *os.File,
+func (r *Runner) Run(
+	ctx context.Context,
+	presetName string,
+	kanataExecutable string,
+	kanataConfig string,
+	tcpPort int,
+	hooks config.Hooks,
+	extraArgs []string,
+	extraEnv map[string]string,
+	kanataLogFile *os.File,
 ) error {
 	r.instancesMappingLock.Lock()
 	defer r.instancesMappingLock.Unlock()
@@ -96,7 +104,7 @@ func (r *Runner) Run(ctx context.Context, presetName string, kanataExecutable st
 	}
 
 	instance := r.kanataInstancePool[instanceIndex]
-	err := instance.RunNonblocking(ctx, kanataExecutable, kanataConfig, tcpPort, hooks, extraArgs, kanataLogFile)
+	err := instance.RunNonblocking(ctx, kanataExecutable, kanataConfig, tcpPort, hooks, extraArgs, extraEnv, kanataLogFile)
 	if err != nil {
 		return fmt.Errorf("failed to run kanata: %v", err)
 	}
@@ -162,7 +170,7 @@ func (r *Runner) ServerMessageCh() <-chan ItemAndPresetName[tcp_client.ServerMes
 	return r.serverMessageCh
 }
 
-func cmd(ctx context.Context, stdout io.Writer, stderr io.Writer, name string, args ...string) *exec.Cmd {
+func cmd(ctx context.Context, stdout io.Writer, stderr io.Writer, name string, args []string, extraEnv map[string]string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.WaitDelay = 3 * time.Second
 	cmd.SysProcAttr = os_specific.ProcessAttr
@@ -172,6 +180,9 @@ func cmd(ctx context.Context, stdout io.Writer, stderr io.Writer, name string, a
 	}
 	if stdout != nil {
 		cmd.Stderr = stderr
+	}
+	for k, v := range extraEnv {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 	return cmd
 }

@@ -37,7 +37,7 @@ func NewKanata() *Kanata {
 }
 
 func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string,
-	tcpPort int, hooks config.Hooks, extraArgs []string, logFile *os.File,
+	tcpPort int, hooks config.Hooks, extraArgs []string, extraEnv map[string]string, logFile *os.File,
 ) error {
 	if kanataExecutable == "" {
 		var err error
@@ -58,7 +58,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 
 	allArgs = append(allArgs, extraArgs...)
 
-	cmd := cmd(ctx, nil, nil, kanataExecutable, allArgs...)
+	cmd := cmd(ctx, nil, nil, kanataExecutable, allArgs, extraEnv)
 
 	go func() {
 		selfCtx, selfCancel := context.WithCancelCause(ctx)
@@ -163,9 +163,13 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		cmdErr := r.cmd.Wait() // block until kanata exits
 		r.cmd = nil
 
-		log.Infof("Waiting for all post-start-async hooks to exit")
+		if len(hooks.PostStartAsync) > 0 {
+			log.Infof("Waiting for all post-start-async hooks to exit")
+		}
 		<-allPostStartAsyncHooksExitedCh
-		log.Infof("All post-start-async hooks exited")
+		if len(hooks.PostStartAsync) > 0 {
+			log.Infof("All post-start-async hooks exited")
+		}
 
 		err = runAllBlockingHooks(hooks.PostStop, "post-stop")
 		if err != nil {
