@@ -181,6 +181,7 @@ func cmd(ctx context.Context, stdout io.Writer, stderr io.Writer, name string, a
 	if stdout != nil {
 		cmd.Stderr = stderr
 	}
+	cmd.Env = os.Environ()
 	for k, v := range extraEnv {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}

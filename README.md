@@ -70,6 +70,7 @@ autorun = true
 # layer_icons = {  }
 # tcp_port = 1234
 # extra_args = ['-n', '-c=~/.config/kanata/another.kbd']
+# extra_env = { MY_ENVVAR = "1" }
 
 [presets.'test cfg']
 kanata_config = '~/.config/kanata/test.kbd'
@@ -78,7 +79,7 @@ kanata_config = '~/.config/kanata/test.kbd'
 ### Explanation
 
 `presets` - a config item, that adds an entry to tray menu. Each preset can have different settings for running kanata with:
-`kanata_config`, `kanata_executable`, `autorun`, `layer_icons`, `tcp_port`, `extra_args`, `autorestart_on_crash`.
+`kanata_config`, `kanata_executable`, `autorun`, `layer_icons`, `tcp_port`, `extra_args`, `extra_env`, `autorestart_on_crash`.
 
 `preset.autorun` - when set to true, preset will run at kanata-tray startup.
 
