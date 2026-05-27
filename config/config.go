@@ -34,6 +34,7 @@ type Preset struct {
 	LayerIcons         map[string]string
 	Hooks              Hooks
 	ExtraArgs          []string
+	ExtraEnv           map[string]string
 	AutorestartOnCrash bool
 }
 
@@ -73,6 +74,7 @@ type preset struct {
 	LayerIcons         map[string]string `toml:"layer_icons"`
 	Hooks              *hooks            `toml:"hooks"`
 	ExtraArgs          extraArgs         `toml:"extra_args"`
+	ExtraEnv           map[string]string `toml:"extra_env"`
 	AutorestartOnCrash *bool             `toml:"autorestart_on_crash"`
 }
 
@@ -99,6 +101,9 @@ func (p *preset) applyDefaults(defaults *preset) {
 	}
 	if p.ExtraArgs == nil {
 		p.ExtraArgs = defaults.ExtraArgs
+	}
+	if p.ExtraEnv == nil {
+		p.ExtraEnv = defaults.ExtraEnv
 	}
 	if p.AutorestartOnCrash == nil {
 		p.AutorestartOnCrash = defaults.AutorestartOnCrash
@@ -135,6 +140,9 @@ func (p *preset) intoExported() (*Preset, error) {
 			return nil, err
 		}
 		result.ExtraArgs = x
+	}
+	if p.ExtraEnv != nil {
+		result.ExtraEnv = p.ExtraEnv
 	}
 	if p.AutorestartOnCrash != nil {
 		result.AutorestartOnCrash = *p.AutorestartOnCrash

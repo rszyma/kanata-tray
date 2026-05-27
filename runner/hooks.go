@@ -42,7 +42,8 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 				makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&1"),
 				makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&2"),
 				hook[0],
-				hook[1:]...,
+				hook[1:],
+				map[string]string{},
 			)
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
@@ -91,7 +92,8 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 			makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&1"),
 			makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&2"),
 			hook[0],
-			hook[1:]...,
+			hook[1:],
+			map[string]string{},
 		)
 		// TODO: capture stdout/stderr?
 		err := cmd.Start()

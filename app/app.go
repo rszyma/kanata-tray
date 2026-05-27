@@ -146,6 +146,7 @@ func (a *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 		a.presets[presetIndex].Preset.TcpPort,
 		a.presets[presetIndex].Preset.Hooks,
 		a.presets[presetIndex].Preset.ExtraArgs,
+		a.presets[presetIndex].Preset.ExtraEnv,
 		a.presetLogFiles[presetIndex],
 	)
 	if err != nil {
