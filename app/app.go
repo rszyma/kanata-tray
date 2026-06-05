@@ -136,6 +136,7 @@ func (a *SystrayApp) runPreset(presetIndex int, runner *runner_pkg.Runner) {
 		a.setStatus(presetIndex, statusCrashed)
 		return
 	}
+	os.Chmod(a.presetLogFiles[presetIndex].Name(), 0666)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	err = runner.Run(
