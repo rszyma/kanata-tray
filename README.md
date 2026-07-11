@@ -120,6 +120,11 @@ and other ignored.
 Hooks allow running custom commands on specific events (e.g. starting preset).
 [Hooks documentation](./doc/hooks.md).
 
+### macOS Launch Agent setup
+
+To run kanata-tray automatically at login as a Launch Agent with full mouse support, see
+[macOS Launch Agent setup guide](./doc/macos_launchagent_setup.md).
+
 ### Config completion in editors
 
 In VSCode to get editor support for your kanata-tray config, install [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml#completion-and-validation-with-json-schema) extension and the following line at the top of your `kanata-tray.toml` file.
