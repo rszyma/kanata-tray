@@ -123,7 +123,7 @@ Hooks allow running custom commands on specific events (e.g. starting preset).
 ### macOS Launch Agent setup
 
 To run kanata-tray automatically at login as a Launch Agent with full mouse support, see
-[macOS Launch Agent setup guide](./doc/macos_launchagent_setup.md).
+[macOS Launch Agent setup guide](./doc/macos/instructions.md).
 
 ### Config completion in editors
 
