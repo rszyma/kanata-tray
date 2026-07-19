@@ -2,6 +2,14 @@ module github.com/rszyma/kanata-tray
 
 go 1.21.0
 
+// Regarding github.com/getlantern/systray - it's been not updated for 3+ years now, and
+// fyne.io/systray looks better maintained, but it has some issues (at least on linux):
+// - doesn't read png icons
+// - icons switching has weird ~1s delay.
+//
+// github.com/getlantern/systray known issues:
+// - underscores are special characters (https://github.com/rszyma/kanata-tray/issues/8)
+
 require (
 	github.com/elliotchance/orderedmap/v2 v2.2.0
 	github.com/getlantern/systray v1.2.2
