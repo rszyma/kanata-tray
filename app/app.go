@@ -31,8 +31,8 @@ type SystrayApp struct {
 	presetAutorestartLimiter []RestartLimiter
 	presetLogFiles           []*os.File
 
-	currentIconData []byte
-	layerIcons      LayerIcons
+	currentIcon status_icons.Icon
+	layerIcons  LayerIcons
 
 	togglePresetCh   chan int // the value sent in channel is an index of preset
 	startPresetCh    chan int // the value sent in channel is an index of preset
@@ -72,7 +72,7 @@ func (a *SystrayApp) InitSystray() *SystrayApp {
 		panic("InitSystray must be called on a freshly created instance")
 	}
 
-	systray.SetIcon(status_icons.Default)
+	a.setIcon(status_icons.Default)
 	systray.SetTooltip("kanata-tray")
 
 	for _, entry := range a.presets {
@@ -173,9 +173,9 @@ func (a *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder
 
 			// fmt.Printf("Received an event from kanata: %v\n", pp.Sprint(event))
 			if event.Item.LayerChange != nil {
-				icon := a.layerIcons.IconForLayerName(event.PresetName, event.Item.LayerChange.NewLayer)
-				if icon == nil {
-					icon = status_icons.Default
+				icon := status_icons.Default
+				if layerIcon := a.layerIcons.IconForLayerName(event.PresetName, event.Item.LayerChange.NewLayer); layerIcon != nil {
+					icon = *layerIcon
 				}
 				a.setIcon(icon)
 			}
@@ -189,7 +189,7 @@ func (a *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder
 				}
 			}
 			if event.Item.ConfigFileReload != nil {
-				prevIcon := a.currentIconData
+				prevIcon := a.currentIcon
 				a.setIcon(status_icons.LiveReload)
 				time.Sleep(150 * time.Millisecond)
 				a.setIcon(prevIcon)
@@ -356,9 +356,20 @@ func (a *SystrayApp) cancel(presetIndex int) {
 	a.presetCancelFuncs[presetIndex] = nil
 }
 
-func (a *SystrayApp) setIcon(iconBytes []byte) {
-	a.currentIconData = iconBytes
-	systray.SetIcon(iconBytes)
+// setIcon updates the tray icon. Template icons are set as macOS template
+// images (tinted from their alpha channel to match a light/dark menu bar);
+// on other platforms they are used as-is.
+func (a *SystrayApp) setIcon(icon status_icons.Icon) {
+	if len(icon.Data) == 0 {
+		log.Errorf("refusing to set an empty tray icon")
+		return
+	}
+	a.currentIcon = icon
+	if icon.IsTemplate {
+		systray.SetTemplateIcon(icon.Data, icon.Data)
+	} else {
+		systray.SetIcon(icon.Data)
+	}
 }
 
 // Returns a channel that sends an index of item that was clicked.

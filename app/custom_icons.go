@@ -1,12 +1,14 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/labstack/gommon/log"
 
 	"github.com/rszyma/kanata-tray/config"
+	"github.com/rszyma/kanata-tray/status_icons"
 )
 
 type LayerIcons struct {
@@ -15,28 +17,28 @@ type LayerIcons struct {
 }
 
 type LayerIconsForPreset struct {
-	layerIcons   map[string][]byte
-	wildcardIcon []byte // can be nil
+	layerIcons   map[string]status_icons.Icon
+	wildcardIcon *status_icons.Icon // can be nil
 }
 
 // Order of resolution:
 // preset -> global -> preset_wildcard -> global_wildcard -> default
 //
 // Returns nil if resolution yields no icon. Caller should then use global default icon.
-func (c LayerIcons) IconForLayerName(presetName string, layerName string) []byte {
+func (c LayerIcons) IconForLayerName(presetName string, layerName string) *status_icons.Icon {
 	// preset
 	preset, ok := c.presetIcons[presetName]
 	if ok {
 		if layerIcon, ok := preset.layerIcons[layerName]; ok {
 			log.Infof("Setting icon: preset:%s, layer:%s", presetName, layerName)
-			return layerIcon
+			return &layerIcon
 		}
 	}
 	// global
 	layerIcon, ok := c.defaultIcons.layerIcons[layerName]
 	if ok {
 		log.Infof("Setting icon: preset:*, layer:%s", layerName)
-		return layerIcon
+		return &layerIcon
 	}
 	// preset_wildcard
 	if preset != nil && preset.wildcardIcon != nil {
@@ -73,18 +75,18 @@ func ResolveIcons(configFolder string, cfg *config.Config) LayerIcons {
 	var icons = LayerIcons{
 		presetIcons: make(map[string]*LayerIconsForPreset),
 		defaultIcons: LayerIconsForPreset{
-			layerIcons:   make(map[string][]byte),
+			layerIcons:   make(map[string]status_icons.Icon),
 			wildcardIcon: nil,
 		},
 	}
 	for layerName, unvalidatedIconPath := range cfg.PresetDefaults.LayerIcons {
-		data, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
+		icon, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
 		if err != nil {
 			log.Warnf("defaults - custom icon file can't be read: %v", err)
 		} else if layerName == "*" {
-			icons.defaultIcons.wildcardIcon = data
+			icons.defaultIcons.wildcardIcon = &icon
 		} else {
-			icons.defaultIcons.layerIcons[layerName] = data
+			icons.defaultIcons.layerIcons[layerName] = icon
 		}
 	}
 
@@ -94,26 +96,26 @@ func ResolveIcons(configFolder string, cfg *config.Config) LayerIcons {
 		presetIcons := icons.presetIcons[presetName]
 		if presetIcons == nil {
 			presetIcons = &LayerIconsForPreset{
-				layerIcons:   make(map[string][]byte),
+				layerIcons:   make(map[string]status_icons.Icon),
 				wildcardIcon: nil,
 			}
 			icons.presetIcons[presetName] = presetIcons
 		}
 		for layerName, unvalidatedIconPath := range preset.LayerIcons {
-			data, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
+			icon, err := readIconInFolder(unvalidatedIconPath, customIconsFolder)
 			if err != nil {
 				log.Warnf("Preset '%s' - custom icon file can't be read: %v", presetName, err)
 			} else if layerName == "*" {
-				presetIcons.wildcardIcon = data
+				presetIcons.wildcardIcon = &icon
 			} else {
-				presetIcons.layerIcons[layerName] = data
+				presetIcons.layerIcons[layerName] = icon
 			}
 		}
 	}
 	return icons
 }
 
-func readIconInFolder(filePath string, folder string) ([]byte, error) {
+func readIconInFolder(filePath string, folder string) (status_icons.Icon, error) {
 	var path string
 	if filepath.IsAbs(filePath) {
 		path = filePath
@@ -122,7 +124,13 @@ func readIconInFolder(filePath string, folder string) ([]byte, error) {
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return status_icons.Icon{}, err
 	}
-	return content, nil
+	if len(content) == 0 {
+		return status_icons.Icon{}, fmt.Errorf("icon file is empty: %s", path)
+	}
+	return status_icons.Icon{
+		Data:       content,
+		IsTemplate: status_icons.IsTemplateFilename(path),
+	}, nil
 }
