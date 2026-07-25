@@ -164,9 +164,18 @@ func mainImpl() error {
 		return fmt.Errorf("failed to change directory: %v", err)
 	}
 
-	cfg, err := config.ReadConfigOrCreateIfNotExist(filepath.Join(configFolder, configFileName))
+	cfgFilePath := filepath.Join(configFolder, configFileName)
+	err = config.CreateConfigFileIfNotExists(cfgFilePath)
 	if err != nil {
-		return fmt.Errorf("ReadConfigOrCreateIfNotExist failed: %v", err)
+		return fmt.Errorf("CreateConfigFileIfNotExists failed: %v", err)
+	}
+	configContent, err := os.ReadFile(cfgFilePath)
+	if err != nil {
+		return fmt.Errorf("reading config file '%s': %v", cfgFilePath, err)
+	}
+	cfg, err := config.ParseConfig(configContent)
+	if err != nil {
+		return fmt.Errorf("ParseConfig failed: %v", err)
 	}
 	menuTemplate, err := app_pkg.MenuTemplateFromConfig(*cfg)
 	if err != nil {

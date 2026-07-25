@@ -237,7 +237,18 @@ func (e extraArgs) intoExported() ([]string, error) {
 	return e, nil
 }
 
-func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
+func CreateConfigFileIfNotExists(configFilePath string) error {
+	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
+		log.Infof("Config file doesn't exist. Creating default config. Path: '%s'", configFilePath)
+		err = os.WriteFile(configFilePath, []byte(defaultConfigContent), os.FileMode(0600))
+		if err != nil {
+			return fmt.Errorf("failed to write default config file to '%s': %v", configFilePath, err)
+		}
+	}
+	return nil
+}
+
+func ParseConfig(content []byte) (*Config, error) {
 	var cfg *config = &config{}
 	// Golang map don't keep track of insertion order, so we need to get the
 	// order of declarations in toml separately.
@@ -253,30 +264,16 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 	presetsFromDefaultConfig := cfg.Presets
 	cfg.Presets = nil
 
-	// Does the file not exist?
-	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
-		log.Infof("Config file doesn't exist. Creating default config. Path: '%s'", configFilePath)
-		err = os.WriteFile(configFilePath, []byte(defaultConfigContent), os.FileMode(0600))
-		if err != nil {
-			return nil, fmt.Errorf("failed to write default config file to '%s': %v", configFilePath, err)
-		}
-	} else {
-		// Load the existing file.
-		content, err := os.ReadFile(configFilePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read file '%s': %v", configFilePath, err)
-		}
-		err = toml.NewDecoder(bytes.NewReader(content)).Decode(&cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse config file '%s': %v", configFilePath, err)
-		}
-		lnames, err := layersOrder(content)
-		if err != nil {
-			panic("default config failed layersOrder")
-		}
-		if len(lnames) != 0 {
-			layersNames = lnames
-		}
+	err = toml.NewDecoder(bytes.NewReader(content)).Decode(&cfg)
+	if err != nil {
+		return nil, fmt.Errorf("parsing toml: %v", err)
+	}
+	lnames, err := layersOrder(content)
+	if err != nil {
+		return nil, fmt.Errorf("layersOrder() failed: %v", err)
+	}
+	if len(lnames) != 0 {
+		layersNames = lnames
 	}
 
 	if cfg.Presets == nil {
