@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/rszyma/kanata-tray/config"
+	"github.com/rszyma/kanata-tray/lib"
 )
 
 //go:embed testdata/config_sample_toml10.toml
@@ -17,7 +18,7 @@ var cfgSampleToml11 []byte
 
 func TestParseConfig(t *testing.T) {
 	cmpTransformer := cmpopts.AcyclicTransformer("OrderedMapToEntries",
-		func(m *config.OrderedMap[string, *config.Preset]) []config.Entry[string, *config.Preset] {
+		func(m *lib.OrderedMap[string, *config.Preset]) []lib.Entry[string, *config.Preset] {
 			return m.Entries()
 		},
 	)
@@ -30,7 +31,7 @@ func TestParseConfig(t *testing.T) {
 		want := &config.Config{
 			PresetDefaults: config.Preset{TcpPort: 5829},
 			General:        config.GeneralConfigOptions{ControlServerPort: 8100},
-			Presets: config.NewOrderedMapFromIter([]config.Entry[string, *config.Preset]{
+			Presets: lib.NewOrderedMapFromIter([]lib.Entry[string, *config.Preset]{
 				{
 					Key: "Default Preset",
 					Value: &config.Preset{
@@ -60,7 +61,7 @@ func TestParseConfig(t *testing.T) {
 				ControlServerEnable: true,
 				ControlServerPort:   8100,
 			},
-			Presets: config.NewOrderedMapFromIter([]config.Entry[string, *config.Preset]{
+			Presets: lib.NewOrderedMapFromIter([]lib.Entry[string, *config.Preset]{
 				{
 					Key: "main - local - cmd-switch",
 					Value: &config.Preset{
@@ -120,7 +121,7 @@ func TestParseConfig(t *testing.T) {
 		want := &config.Config{
 			PresetDefaults: config.Preset{TcpPort: 5829},
 			General:        config.GeneralConfigOptions{ControlServerPort: 8100},
-			Presets:        config.NewOrderedMapFromIter([]config.Entry[string, *config.Preset]{
+			Presets:        lib.NewOrderedMapFromIter([]lib.Entry[string, *config.Preset]{
 				// FIXME
 			}),
 		}
@@ -137,7 +138,7 @@ func TestParseConfig(t *testing.T) {
 		want := &config.Config{
 			PresetDefaults: config.Preset{TcpPort: 5829},
 			General:        config.GeneralConfigOptions{ControlServerPort: 8100},
-			Presets: config.NewOrderedMapFromIter([]config.Entry[string, *config.Preset]{
+			Presets: lib.NewOrderedMapFromIter([]lib.Entry[string, *config.Preset]{
 				{
 					Key: "Default Preset",
 					Value: &config.Preset{
