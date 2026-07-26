@@ -366,6 +366,21 @@ func NewOrderedMap[K string, V fmt.GoStringer]() *OrderedMap[K, V] {
 	}
 }
 
+type Entry[K comparable, V any] struct {
+	Key   K
+	Value V
+}
+
+func NewOrderedMapFromIter[K string, V fmt.GoStringer](iter []Entry[K, V]) *OrderedMap[K, V] {
+	m := &OrderedMap[K, V]{
+		OrderedMap: orderedmap.NewOrderedMap[K, V](),
+	}
+	for _, elem := range iter {
+		m.Set(elem.Key, elem.Value)
+	}
+	return m
+}
+
 // impl `fmt.GoStringer`
 func (m *OrderedMap[K, V]) GoString() string {
 	indent := "    "
@@ -392,4 +407,18 @@ func (m *OrderedMap[K, V]) GoString() string {
 	}
 	builder.WriteString("\n}")
 	return builder.String()
+}
+
+func (m *OrderedMap[K, V]) Entries() []Entry[K, V] {
+	if m == nil {
+		return nil
+	}
+	entries := make([]Entry[K, V], m.Len())
+	for it := m.Front(); it != nil; it = it.Next() {
+		entries = append(entries, Entry[K, V]{
+			Key:   it.Key,
+			Value: it.Value,
+		})
+	}
+	return entries
 }

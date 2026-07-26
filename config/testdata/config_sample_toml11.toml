@@ -1,0 +1,36 @@
+#:tombi toml-version = "v1.1.0"
+
+'$schema' = 'https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json'
+
+[general]
+allow_concurrent_presets = false
+control_server_enable = true
+
+[defaults]
+autorestart_on_crash = true
+extra_args = [ "--nodelay" ]
+layer_icons = {
+    mouse = 'mouse.png',
+    '*' = 'other_layers.ico',
+}
+
+[presets]
+"main - local - cmd-switch" = {
+    autorun = true,
+    kanata_executable = '~/gh/kanata/target/release/kanata_cmd_switch',
+    kanata_config = '~/.config/kanata/kanata.kbd',
+    extra_env = { KANATA_CMDSWITCH_ENABLE = "1" },
+    hooks.pre-start = ["notify-send", "running kanata!!"],
+}
+"main - local - release" = {
+    kanata_executable = '~/gh/kanata/target/release/kanata',
+    kanata_config = '~/.config/kanata/kanata.kbd',
+    autorun = false,
+}
+"main - nixpkgs ver" = {
+    kanata_executable = '/run/current-system/sw/bin/kanata',
+    kanata_config = '~/.config/kanata/kanata.kbd',
+}
+"test" = {
+    kanata_config = '~/.config/kanata/test.kbd',
+}
