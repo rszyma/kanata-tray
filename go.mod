@@ -14,6 +14,7 @@ require (
 	github.com/elliotchance/orderedmap/v2 v2.2.0
 	github.com/getlantern/systray v1.2.2
 	github.com/go-chi/chi/v5 v5.2.1
+	github.com/google/go-cmp v0.7.0
 	github.com/k0kubun/pp/v3 v3.2.0
 	github.com/kirsle/configdir v0.0.0-20170128060238-e45d2f54772f
 	github.com/kr/pretty v0.3.1
