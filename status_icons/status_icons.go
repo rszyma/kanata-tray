@@ -7,65 +7,121 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/labstack/gommon/log"
 )
 
+// Icon is a tray icon along with the way it should be rendered.
+type Icon struct {
+	Data []byte
+	// IsTemplate marks the icon as a macOS template image: the system ignores
+	// its colors and tints the shape from the alpha channel to match a light
+	// or dark menu bar. Ignored on other platforms.
+	IsTemplate bool
+}
+
 //go:embed default.ico
-var Default []byte
+var defaultIconData []byte
 
 //go:embed crash.ico
-var Crash []byte
+var crashIconData []byte
 
 //go:embed pause.ico
-var Pause []byte
+var pauseIconData []byte
 
 //go:embed live-reload.ico
-var LiveReload []byte
+var liveReloadIconData []byte
+
+var (
+	Default    = Icon{Data: defaultIconData}
+	Crash      = Icon{Data: crashIconData}
+	Pause      = Icon{Data: pauseIconData}
+	LiveReload = Icon{Data: liveReloadIconData}
+)
 
 //////////////////////////////////////////////
 
 var statusIconsDir string = "status_icons"
 
+// Apple's convention for template images: an icon file whose name ends with
+// "Template" (before the extension) is tinted by macOS to match the menu bar.
+const templateSuffix = "Template"
+
+// IsTemplateFilename reports whether an icon path follows the macOS template
+// image naming convention, e.g. "mouseTemplate.png".
+func IsTemplateFilename(path string) bool {
+	return strings.HasSuffix(strings.ToLower(filenameWithoutExt(path)), strings.ToLower(templateSuffix))
+}
+
+func filenameWithoutExt(path string) string {
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
 func LoadCustomStatusIcons(configDir string) error {
-	prefixes := []string{"default", "crash", "pause", "live-reload"}
-	for i, prefix := range prefixes {
-		matches, err := filepath.Glob(filepath.Join(
-			configDir, statusIconsDir, fmt.Sprintf("%s.*", prefix),
-		))
-		if err != nil {
-			return fmt.Errorf("filepath.Glob: %v", err)
+	dir := filepath.Join(configDir, statusIconsDir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
 		}
-		if len(matches) < 1 {
+		return fmt.Errorf("os.ReadDir: %v", err)
+	}
+
+	targets := []struct {
+		prefix string
+		icon   *Icon
+	}{
+		{"default", &Default},
+		{"crash", &Crash},
+		{"pause", &Pause},
+		{"live-reload", &LiveReload},
+	}
+
+	for _, target := range targets {
+		filename, isTemplate, ok := findStatusIcon(entries, target.prefix)
+		if !ok {
 			continue
 		}
+		path := filepath.Join(dir, filename)
 
-		// Take only first match, ignore others. There should be only 1 matching
-		// icon name anyway.
-		match := matches[0]
-
-		log.Infof("loading status icon: %s", match)
-		fileContent, err := os.ReadFile(match)
+		log.Infof("loading status icon: %s (template: %v)", path, isTemplate)
+		fileContent, err := os.ReadFile(path)
 		if err != nil {
 			log.Errorf("LoadCustomStatusIcons: os.ReadFile: %v", err)
 			continue
 		}
-
-		switch i {
-		case 0:
-			Default = fileContent
-		case 1:
-			Crash = fileContent
-		case 2:
-			Pause = fileContent
-		case 3:
-			LiveReload = fileContent
-		default:
-			panic("out of range")
+		if len(fileContent) == 0 {
+			log.Errorf("LoadCustomStatusIcons: status icon file is empty: %s", path)
+			continue
 		}
+
+		*target.icon = Icon{Data: fileContent, IsTemplate: isTemplate}
 	}
 
 	return nil
+}
+
+// Finds a status icon file for the given prefix. A "<prefix>Template.*" file
+// wins over a plain "<prefix>.*" one, so that a template icon can be added
+// without removing the default icon written on first run. If there are
+// multiple files matching, only the first one is used and others are ignored.
+func findStatusIcon(entries []os.DirEntry, prefix string) (filename string, isTemplate bool, found bool) {
+	var plainMatch string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := filenameWithoutExt(entry.Name())
+		if strings.EqualFold(name, prefix+templateSuffix) {
+			return entry.Name(), true, true
+		}
+		if name == prefix && plainMatch == "" {
+			plainMatch = entry.Name()
+		}
+	}
+	return plainMatch, false, plainMatch != ""
 }
 
 func CreateDefaultStatusIconsDirIfNotExists(configDir string) error {
@@ -79,7 +135,7 @@ func CreateDefaultStatusIconsDirIfNotExists(configDir string) error {
 			return fmt.Errorf("failed to create folder: %v", err)
 		}
 		names := []string{"default.ico", "crash.ico", "pause.ico", "live-reload.ico"}
-		data := [][]byte{Default, Crash, Pause, LiveReload}
+		data := [][]byte{defaultIconData, crashIconData, pauseIconData, liveReloadIconData}
 		for i, name := range names {
 			path := filepath.Join(customIconsPath, name)
 			err := os.WriteFile(path, data[i], 0o644)

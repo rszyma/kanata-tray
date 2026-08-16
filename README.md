@@ -3,7 +3,7 @@
 A simple wrapper for [kanata](https://github.com/jtroo/kanata) to control it from tray icon.
 Works on Windows, Linux and macOS.
 
-### Note: there's now Windows-only native tray app support in kanata (https://github.com/jtroo/kanata/pull/990)
+### Note: there's now Windows-only native tray app support in kanata ([https://github.com/jtroo/kanata/pull/990](https://github.com/jtroo/kanata/pull/990))
 
 See [#24](https://github.com/rszyma/kanata-tray/issues/24) for comparison
 
@@ -26,6 +26,7 @@ Config file name is `kanata-tray.toml`.
 Supported TOML version: 1.1.0
 
 The config folder location:
+
 - Linux `~/.config/kanata-tray`.
 - Windows `C:\Users\<YourUsername>\AppData\Roaming\kanata-tray`
 - macOS `$HOME/Library/Application\ Support/kanata-tray`
@@ -77,6 +78,7 @@ autorun = true
 kanata_config = '~/.config/kanata/test.kbd'
 
 ```
+
 ### Explanation
 
 `presets` - a config item, that adds an entry to tray menu. Each preset can have different settings for running kanata with:
@@ -84,7 +86,7 @@ kanata_config = '~/.config/kanata/test.kbd'
 
 `preset.autorun` - when set to true, preset will run at kanata-tray startup.
 
-`preset.layer_icons` - maps kanata layer names to custom icons. Custom icons should be placed in `icons` folder in config directory, next to `kanata-tray.toml`. Accepted icon types on Linux are `.ico`, `.png`, `.jpg`; on Windows only `.ico` is supported. You can assign an icon to special identifier `'*'` to change icon for other layers not specified in `[layer_icons]`.
+`preset.layer_icons` - maps kanata layer names to custom icons. Custom icons should be placed in `icons` folder in config directory, next to `kanata-tray.toml`. Accepted icon types on Linux are `.ico`, `.png`, `.jpg`; on Windows only `.ico` is supported. You can assign an icon to special identifier `'*'` to change icon for other layers not specified in `[layer_icons]`. See [template icons on macOS](#template-icons-on-macos) for icons that follow the menu bar appearance.
 
 `preset.autorestart_on_crash` - when set to true, preset will automatically restart whenever kanata crashes.
 In case of too rapid restarts (above 2 autorestarts / minute) this feature will be automatically disabled.
@@ -97,6 +99,7 @@ When disabled, switching presets will stop currently running preset (if any).
 Disabled by default.
 
 Other notes:
+
 - You can use `~` in `kanata_config`, `kanata_executable` and `extra_args` to substitute to your "home" directory.
 - Paths starting with `.\` (on Windows) or `./` (on Linux and macOS) will reference files located in kanata-tray config directory.
 - On Windows: make sure to surround paths with single-quotes `'` instead of double-quotes, otherwise paths will not work (because `\` would be treated as escape character).
@@ -112,9 +115,13 @@ with other one of your choice.
 
 - Accepted file types are the same as in `icons`.
 - The filename prefix must match specifc status i.e. files must start with one of:
-"default", "crash", "pause", "live-reload".
+  "default", "crash", "pause", "live-reload".
 - If there are multiple files matching the prefix, only one of them will be loaded,
-and other ignored.
+  and other ignored.
+
+### Template icons on macOS
+
+On macOS, tinted-style icons are supported if the filename ends in `Template`. [Template icons documentation](./doc/tinted_icons.md).
 
 ### Hooks
 
@@ -124,6 +131,7 @@ Hooks allow running custom commands on specific events (e.g. starting preset).
 ### Config completion in editors
 
 In VSCode to get editor support for your kanata-tray config, install [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml#completion-and-validation-with-json-schema) extension and the following line at the top of your `kanata-tray.toml` file.
+
 ```toml
 "$schema" = "https://raw.githubusercontent.com/rszyma/kanata-tray/main/doc/config_schema.json"
 ```
@@ -145,26 +153,31 @@ Debug logs - more verbose kanata-tray output, debug logging can be enabled with 
 For Linux, make sure to install required packages first:
 
 ### Arch:
+
 ```bash
 pacman -S libayatana-appindicator
 ```
 
 also if you want to build from source:
+
 ```bash
 pacman -S base-devel gtk3 go just
 ```
 
 ### Ubuntu:
+
 ```bash
 sudo apt-get install libayatana-appindicator3-dev
 ```
 
 also if you want to build from source:
+
 ```bash
 sudo apt-get install gcc libgtk-3-dev golang just
 ```
 
 ### OpenSUSE Tumbleweed:
+
 ```bash
 sudo zypper in libayatana-appindicator3-devel
 ```
@@ -174,7 +187,6 @@ sudo zypper in libayatana-appindicator3-devel
 Prebuild binaries for Windows and Linux: [releases page](https://github.com/rszyma/kanata-tray/releases/latest)
 
 To build from source see recipes in [justfile](./justfile).
-
 
 ## Contributing
 
