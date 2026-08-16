@@ -34,7 +34,7 @@ func TestLoadCustomStatusIcons(t *testing.T) {
 	files := map[string]string{
 		"default.ico":         "plain default",
 		"defaultTemplate.png": "template default",
-		"pause.ico":           "plain pause",
+		"pause.custom.ico":    "plain pause",
 		"crash.ico":           "",
 	}
 	for name, content := range files {

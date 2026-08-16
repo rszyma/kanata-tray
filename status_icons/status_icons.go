@@ -117,7 +117,7 @@ func findStatusIcon(entries []os.DirEntry, prefix string) (filename string, isTe
 		if name == prefix+templateSuffix {
 			return entry.Name(), true, true
 		}
-		if name == prefix && plainMatch == "" {
+		if strings.HasPrefix(name, prefix) && plainMatch == "" {
 			plainMatch = entry.Name()
 		}
 	}
