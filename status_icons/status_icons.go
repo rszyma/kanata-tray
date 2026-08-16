@@ -50,13 +50,14 @@ const templateSuffix = "Template"
 
 // IsTemplateFilename reports whether an icon path follows the macOS template
 // image naming convention, e.g. "mouseTemplate.png".
+// https://developer.apple.com/documentation/foundation/bundle/image(forresource:)
 func IsTemplateFilename(path string) bool {
-	return strings.HasSuffix(strings.ToLower(filenameWithoutExt(path)), strings.ToLower(templateSuffix))
+	return strings.HasSuffix(filenameWithoutExt(path), templateSuffix)
 }
 
 func filenameWithoutExt(path string) string {
-	base := filepath.Base(path)
-	return strings.TrimSuffix(base, filepath.Ext(base))
+	basename := filepath.Base(path)
+	return strings.TrimSuffix(basename, filepath.Ext(basename))
 }
 
 func LoadCustomStatusIcons(configDir string) error {
@@ -103,10 +104,9 @@ func LoadCustomStatusIcons(configDir string) error {
 	return nil
 }
 
-// Finds a status icon file for the given prefix. A "<prefix>Template.*" file
-// wins over a plain "<prefix>.*" one, so that a template icon can be added
-// without removing the default icon written on first run. If there are
-// multiple files matching, only the first one is used and others are ignored.
+// Finds a status icon file matching a prefix.
+// A "<prefix>Template.*" file wins over a plain "<prefix>*" one.
+// Only first match is returned, others are ignored.
 func findStatusIcon(entries []os.DirEntry, prefix string) (filename string, isTemplate bool, found bool) {
 	var plainMatch string
 	for _, entry := range entries {
@@ -114,7 +114,7 @@ func findStatusIcon(entries []os.DirEntry, prefix string) (filename string, isTe
 			continue
 		}
 		name := filenameWithoutExt(entry.Name())
-		if strings.EqualFold(name, prefix+templateSuffix) {
+		if name == prefix+templateSuffix {
 			return entry.Name(), true, true
 		}
 		if name == prefix && plainMatch == "" {

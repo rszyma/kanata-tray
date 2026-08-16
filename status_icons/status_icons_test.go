@@ -9,7 +9,7 @@ import (
 func TestIsTemplateFilename(t *testing.T) {
 	cases := map[string]bool{
 		"mouseTemplate.png":           true,
-		"mousetemplate.png":           true,
+		"mousetemplate.png":           false, // must be case-sensitive to match.
 		"/abs/path/mouseTemplate.ico": true,
 		"defaultTemplate":             true,
 		"mouse.png":                   false,
