@@ -12,7 +12,7 @@
 buildGoModule {
   name = "kanata-tray";
   src = lib.cleanSource ./..;
-  vendorHash = "sha256-UUsg62wt5h2n8rEnECh5ZkSUgD2Ysq9RVEo9R5TkS6s=";
+  vendorHash = "sha256-X4O+6Vmei6Y/8ARLCt2MJpQT+GZyLh333R5SjegeMqc=";
   env = {
     CGO_ENABLED = 1;
     GO111MODULE = "on";

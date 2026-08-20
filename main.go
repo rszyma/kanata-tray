@@ -17,6 +17,7 @@ import (
 	app_pkg "github.com/rszyma/kanata-tray/app"
 	"github.com/rszyma/kanata-tray/app/controlserver"
 	"github.com/rszyma/kanata-tray/config"
+	defaultconfig "github.com/rszyma/kanata-tray/config/default_config"
 	runner_pkg "github.com/rszyma/kanata-tray/runner"
 	"github.com/rszyma/kanata-tray/status_icons"
 )
@@ -164,9 +165,15 @@ func mainImpl() error {
 		return fmt.Errorf("failed to change directory: %v", err)
 	}
 
-	cfg, err := config.ReadConfigOrCreateIfNotExist(filepath.Join(configFolder, configFileName))
+	cfgPath := filepath.Join(configFolder, configFileName)
+	cfgText, err := config.ReadOrCreateConfigFile(cfgPath, defaultconfig.DefaultConfigContent)
 	if err != nil {
-		return fmt.Errorf("ReadConfigOrCreateIfNotExist failed: %v", err)
+		return fmt.Errorf("ReadOrCreateConfigFile failed: %v", err)
+	}
+
+	cfg, err := config.ParseConfig(cfgText, defaultconfig.DefaultConfigContent)
+	if err != nil {
+		return fmt.Errorf("while parsing config file %s: %v", cfgPath, err)
 	}
 	menuTemplate, err := app_pkg.MenuTemplateFromConfig(*cfg)
 	if err != nil {

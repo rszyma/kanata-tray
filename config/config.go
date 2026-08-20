@@ -1,13 +1,14 @@
 package config
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/elliotchance/orderedmap/v2"
+	"github.com/expr-lang/expr"
 	"github.com/k0kubun/pp/v3"
 	"github.com/kr/pretty"
 	"github.com/labstack/gommon/log"
@@ -16,9 +17,6 @@ import (
 
 	_ "embed"
 )
-
-//go:embed default_config.toml
-var defaultConfigContent string
 
 type Config struct {
 	PresetDefaults Preset
@@ -67,7 +65,7 @@ type config struct {
 }
 
 type preset struct {
-	Autorun            *bool             `toml:"autorun"`
+	AutorunExpr        any               `toml:"autorun"`
 	KanataExecutable   *string           `toml:"kanata_executable"`
 	KanataConfig       *string           `toml:"kanata_config"`
 	TcpPort            *int              `toml:"tcp_port"`
@@ -78,9 +76,10 @@ type preset struct {
 	AutorestartOnCrash *bool             `toml:"autorestart_on_crash"`
 }
 
+// TODO: move this to toml parser?
 func (p *preset) applyDefaults(defaults *preset) {
-	if p.Autorun == nil {
-		p.Autorun = defaults.Autorun
+	if p.AutorunExpr == nil {
+		p.AutorunExpr = defaults.AutorunExpr
 	}
 	if p.KanataExecutable == nil {
 		p.KanataExecutable = defaults.KanataExecutable
@@ -110,10 +109,35 @@ func (p *preset) applyDefaults(defaults *preset) {
 	}
 }
 
-func (p *preset) intoExported() (*Preset, error) {
+func (p *preset) IntoExported(name string) (*Preset, error) {
 	result := &Preset{}
-	if p.Autorun != nil {
-		result.Autorun = *p.Autorun
+	if p.AutorunExpr != nil {
+		switch autorunExpr := p.AutorunExpr.(type) {
+		case bool:
+			result.Autorun = autorunExpr
+		case string:
+			env := map[string]any{
+				"linux":   runtime.GOOS == "linux",
+				"windows": runtime.GOOS == "windows",
+				"darwin":  runtime.GOOS == "darwin",
+				"env": func(key string) string {
+					return os.Getenv(key)
+				},
+			}
+			program, err := expr.Compile(autorunExpr, expr.AsBool(), expr.Env(env))
+			if err != nil {
+				return nil, fmt.Errorf("while parsing autorun expression: %s", err)
+			}
+			output, err := expr.Run(program, env)
+			if err != nil {
+				return nil, fmt.Errorf("while evaluating autorun expression: %s", err)
+			}
+			outputBool := output.(bool)
+			result.Autorun = outputBool
+			log.Infof("autorun for preset '%s' evaluated %s (expr: '%s')", name, strconv.FormatBool(outputBool), autorunExpr)
+		default:
+			return nil, fmt.Errorf("autorun has invalid type. Supported types: boolean, string")
+		}
 	}
 	if p.KanataExecutable != nil {
 		result.KanataExecutable = *p.KanataExecutable
@@ -154,6 +178,23 @@ type generalConfigOptions struct {
 	AllowConcurrentPresets *bool `toml:"allow_concurrent_presets"`
 	ControlServerEnable    *bool `toml:"control_server_enable"`
 	ControlServerPort      *int  `toml:"control_server_port"`
+}
+
+func (g *generalConfigOptions) IntoExported() GeneralConfigOptions {
+	if g == nil {
+		return GeneralConfigOptions{}
+	}
+	var G GeneralConfigOptions
+	if g.AllowConcurrentPresets != nil {
+		G.AllowConcurrentPresets = *g.AllowConcurrentPresets
+	}
+	if g.ControlServerEnable != nil {
+		G.ControlServerEnable = *g.ControlServerEnable
+	}
+	if g.ControlServerPort != nil {
+		G.ControlServerPort = *g.ControlServerPort
+	}
+	return G
 }
 
 type hooks struct {
@@ -216,7 +257,7 @@ func (p *hooks) intoExported() (*Hooks, error) {
 	}
 	templ, err := newCmdTemplFromRaw(cmdTemplate)
 	if err != nil {
-		return nil, fmt.Errorf("parsing cmd_template: %w", err)
+		return nil, fmt.Errorf("while parsing cmd_template: %w", err)
 	}
 	return &Hooks{
 		PreStart:       templ.applyMany(p.PreStart),
@@ -237,15 +278,27 @@ func (e extraArgs) intoExported() ([]string, error) {
 	return e, nil
 }
 
-func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
-	var cfg *config = &config{}
-	// Golang map don't keep track of insertion order, so we need to get the
-	// order of declarations in toml separately.
-	layersNames, err := layersOrder([]byte(defaultConfigContent))
-	if err != nil {
-		panic(fmt.Errorf("default config failed layersOrder: %v", err))
+func ReadOrCreateConfigFile(configPath string, cfgDefaultText string) (string, error) {
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		log.Infof("Config file doesn't exist. Creating default config. Path: '%s'", configPath)
+		err = os.WriteFile(configPath, []byte(cfgDefaultText), os.FileMode(0600))
+		if err != nil {
+			return "", fmt.Errorf("while writing default config file to '%s': %v", configPath, err)
+		}
+		return cfgDefaultText, nil
 	}
-	err = toml.Unmarshal([]byte(defaultConfigContent), &cfg)
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		return "", fmt.Errorf("while reading config file from '%s': %v", configPath, err)
+	}
+	return string(content), nil
+}
+
+func ParseConfig(cfgText string, cfgDefaultText string) (*Config, error) {
+	var cfg *config = &config{}
+	var err error
+
+	err = toml.Unmarshal([]byte(cfgDefaultText), &cfg)
 	if err != nil {
 		panic(fmt.Errorf("failed to parse default config: %v", err))
 	}
@@ -253,75 +306,62 @@ func ReadConfigOrCreateIfNotExist(configFilePath string) (*Config, error) {
 	presetsFromDefaultConfig := cfg.Presets
 	cfg.Presets = nil
 
-	// Does the file not exist?
-	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
-		log.Infof("Config file doesn't exist. Creating default config. Path: '%s'", configFilePath)
-		err = os.WriteFile(configFilePath, []byte(defaultConfigContent), os.FileMode(0600))
-		if err != nil {
-			return nil, fmt.Errorf("failed to write default config file to '%s': %v", configFilePath, err)
-		}
-	} else {
-		// Load the existing file.
-		content, err := os.ReadFile(configFilePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read file '%s': %v", configFilePath, err)
-		}
-		err = toml.NewDecoder(bytes.NewReader(content)).Decode(&cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse config file '%s': %v", configFilePath, err)
-		}
-		lnames, err := layersOrder(content)
-		if err != nil {
-			panic("default config failed layersOrder")
-		}
-		if len(lnames) != 0 {
-			layersNames = lnames
-		}
+	err = toml.NewDecoder(strings.NewReader(cfgText)).Decode(&cfg)
+	if err != nil {
+		return nil, fmt.Errorf("while decoding toml: %v", err)
 	}
 
+	// Golang don't keep track of map insertion order,
+	// neither the toml lib we use provide us this info,
+	// so we need to hack something up to get the original declaration order.
+	presetNames, err := presetsOrder(cfgText)
+	if err != nil {
+		panic("default config failed layersOrder")
+	}
+
+	// If parsed config has no presets, populate it with preset(s) from default config.
 	if cfg.Presets == nil {
 		cfg.Presets = presetsFromDefaultConfig
+		defaultPresetNames, err := presetsOrder(cfgDefaultText)
+		if err != nil {
+			panic(fmt.Errorf("failed presetsOrder for default config: %v", err))
+		}
+		presetNames = defaultPresetNames
 	}
 
-	defaults := cfg.PresetDefaults
-
-	defaultsExported, err := defaults.intoExported()
+	defaultsExported, err := cfg.PresetDefaults.IntoExported("<default>")
 	if err != nil {
 		return nil, err
 	}
 	var cfg2 *Config = &Config{
 		PresetDefaults: *defaultsExported,
-		General: GeneralConfigOptions{
-			AllowConcurrentPresets: *cfg.General.AllowConcurrentPresets,
-			ControlServerEnable:    *cfg.General.ControlServerEnable,
-			ControlServerPort:      *cfg.General.ControlServerPort,
-		},
-		Presets: NewOrderedMap[string, *Preset](),
+		General:        cfg.General.IntoExported(),
+		Presets:        NewOrderedMap[string, *Preset](),
 	}
 
-	for _, layerName := range layersNames {
-		v, ok := cfg.Presets[layerName]
+	for _, presetName := range presetNames {
+		p, ok := cfg.Presets[presetName]
 		if !ok {
-			panic("layer names should match")
+			panic("preset names should match")
 		}
-		v.applyDefaults(defaults)
-		exported, err := v.intoExported()
+		p.applyDefaults(cfg.PresetDefaults)
+		exported, err := p.IntoExported(presetName)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("preset '%s': %s", presetName, err)
 		}
-		cfg2.Presets.Set(layerName, exported)
+		cfg2.Presets.Set(presetName, exported)
 	}
 
 	log.Debugf("loaded config: %s", pretty.Sprint(cfg2))
 	return cfg2, nil
 }
 
-// Returns an array of layer names from config in order of declaration.
-func layersOrder(cfgContent []byte) ([]string, error) {
+// Returns an array of preset names from config in order of declaration.
+func presetsOrder(cfgText string) ([]string, error) {
 	layerNamesInOrder := []string{}
 
 	p := tomlu.Parser{}
-	p.Reset([]byte(cfgContent))
+	p.Reset([]byte(cfgText))
 
 	// iterate over all top level expressions
 	for p.NextExpression() {
