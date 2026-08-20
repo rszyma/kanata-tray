@@ -84,9 +84,16 @@ kanata_config = '~/.config/kanata/test.kbd'
 `presets` - a config item, that adds an entry to tray menu. Each preset can have different settings for running kanata with:
 `kanata_config`, `kanata_executable`, `autorun`, `layer_icons`, `tcp_port`, `extra_args`, `extra_env`, `autorestart_on_crash`.
 
-`preset.autorun` - when set to true, preset will run at kanata-tray startup.
+`preset.autorun` - whether a preset should automatically run at kanata-tray startup.
+Possible values: `true`, `false`, or a string with more complex logic.
+See [autorun documentation](./doc/presets_autorun.md) for details.
+Disabled by default.
 
-`preset.layer_icons` - maps kanata layer names to custom icons. Custom icons should be placed in `icons` folder in config directory, next to `kanata-tray.toml`. Accepted icon types on Linux are `.ico`, `.png`, `.jpg`; on Windows only `.ico` is supported. You can assign an icon to special identifier `'*'` to change icon for other layers not specified in `[layer_icons]`. See [template icons on macOS](#template-icons-on-macos) for icons that follow the menu bar appearance.
+`preset.layer_icons` - maps kanata layer names to custom icons.
+Custom icons should be placed in `icons` folder in config directory, next to `kanata-tray.toml`.
+Accepted icon types on Linux are `.ico`, `.png`, `.jpg`; on Windows only `.ico` is supported.
+You can assign an icon to special identifier `'*'` to change icon for other layers not specified in `[layer_icons]`.
+See [template icons on macOS](#template-icons-on-macos) for icons that follow tinted-style appearance.
 
 `preset.autorestart_on_crash` - when set to true, preset will automatically restart whenever kanata crashes.
 In case of too rapid restarts (above 2 autorestarts / minute) this feature will be automatically disabled.

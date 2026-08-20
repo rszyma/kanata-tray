@@ -13,7 +13,14 @@
                     "description": "A path to a kanata configuration file. It will be passed as `--cfg=<value>` arg to kanata."
                 },
                 "autorun": {
-                    "type": "boolean",
+                    "oneOf": [
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "type": "string"
+                        }
+                    ],
                     "description": "Whether the preset will be automatically ran at kanata-tray startup."
                 },
                 "tcp_port": {

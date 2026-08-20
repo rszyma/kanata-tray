@@ -47,6 +47,7 @@
             build-deps
             ++ runtime-deps
             ++ [
+              go
               # converting png -> ico
               #  convert input.png -define icon:auto-resize=48,32,16 output.ico
               imagemagick
