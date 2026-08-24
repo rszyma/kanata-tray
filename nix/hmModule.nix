@@ -24,7 +24,7 @@ in
           type = tomlFormat.type;
           default = {
             defaults = {
-              kanata_executable = "${self.kanata}/bin/kanata";
+              kanata_executable = "${pkgs.kanata}/bin/kanata";
               hooks.cmd_template = [
                 "${pkgs.bash}/bin/bash"
                 "-c"
