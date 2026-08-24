@@ -1,37 +1,48 @@
 {
-  buildGoModule,
   lib,
-  hostPlatform,
-  build-deps,
-  runtime-deps,
-  pkgs,
-  self,
+  buildGoModule,
+  makeWrapper,
+  libayatana-appindicator,
+  gtk3,
+  stdenv,
+  pkg-config,
+  self ? { },
   ...
 }:
 
-buildGoModule {
-  name = "kanata-tray";
+buildGoModule (finalAttrs: {
+  pname = "kanata-tray";
+  version = "git";
+
   src = lib.cleanSource ./..;
+
   vendorHash = "sha256-X4O+6Vmei6Y/8ARLCt2MJpQT+GZyLh333R5SjegeMqc=";
-  env = {
-    CGO_ENABLED = 1;
-    GO111MODULE = "on";
-    GOOS = if hostPlatform.isDarwin then "darwin" else "linux";
-  };
+
   flags = [ "-trimpath" ];
+
   ldflags = [
     "-s"
     "-w"
-    "-X main.buildVersion=nix"
-    "-X main.buildHash=${self.shortRev or self.dirtyShortRev or "unknown"}"
+    "-X main.buildVersion=${(finalAttrs.version)}"
+    "-X main.buildHash=${finalAttrs.src.rev or self.shortRev or self.dirtyShortRev or "unknown"}"
     "-X main.buildDate=unknown"
   ];
-  nativeBuildInputs = build-deps;
-  buildInputs = runtime-deps ++ [ pkgs.makeWrapper ];
+
+  nativeBuildInputs = lib.optional stdenv.hostPlatform.isLinux pkg-config;
+
+  buildInputs = [
+    makeWrapper
+  ]
+  ++ lib.optionals stdenv.hostPlatform.isLinux [
+    libayatana-appindicator
+    gtk3
+  ];
+
   postInstall = ''
     wrapProgram $out/bin/kanata-tray --set-default KANATA_TRAY_LOG_DIR /tmp --prefix PATH : $out/bin
   '';
-  meta = with pkgs.lib; {
+
+  meta = with lib; {
     description = "Tray Icon for Kanata";
     longDescription = ''
       A simple wrapper for kanata to control it from tray icon.
@@ -41,4 +52,4 @@ buildGoModule {
     license = licenses.gpl3Plus;
     platforms = platforms.unix;
   };
-}
+})

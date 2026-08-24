@@ -12,7 +12,6 @@
   };
 
   outputs =
-
     {
       self,
       nixpkgs,
@@ -23,34 +22,21 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        inherit (pkgs.stdenvNoCC) hostPlatform;
-        runtime-deps = pkgs.lib.optionals (hostPlatform.isLinux) [
-          pkgs.libayatana-appindicator
-          pkgs.gtk3
-        ];
-        build-deps = [ pkgs.pkg-config ];
+        package = pkgs.callPackage ./nix/package.nix { inherit self; };
       in
       {
-        packages.kanata-tray = pkgs.callPackage ./nix/package.nix {
-          inherit
-            build-deps
-            runtime-deps
-            hostPlatform
-            self
-            ;
-        };
-        packages.default = self.packages.${system}.kanata-tray;
+        packages.kanata-tray = package;
+        packages.default = package;
 
         devShells.default = pkgs.mkShell {
           packages =
-            with pkgs;
-            build-deps
-            ++ runtime-deps
+            package.buildInputs
+            ++ package.nativeBuildInputs
             ++ [
-              go
+              pkgs.go
               # converting png -> ico
               #  convert input.png -define icon:auto-resize=48,32,16 output.ico
-              imagemagick
+              pkgs.imagemagick
             ];
         };
 
