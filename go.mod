@@ -12,19 +12,20 @@ go 1.21.0
 
 require (
 	github.com/elliotchance/orderedmap/v2 v2.2.0
+	github.com/expr-lang/expr v1.17.8
 	github.com/getlantern/systray v1.2.2
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/k0kubun/pp/v3 v3.2.0
 	github.com/kirsle/configdir v0.0.0-20170128060238-e45d2f54772f
 	github.com/kr/pretty v0.3.1
 	github.com/labstack/gommon v0.4.2
+	github.com/mattn/go-isatty v0.0.20
 	github.com/pelletier/go-toml/v2 v2.4.0
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	github.com/spf13/pflag v1.0.6
 )
 
 require (
-	github.com/expr-lang/expr v1.17.8 // indirect
 	github.com/getlantern/context v0.0.0-20220418194847-3d5e7a086201 // indirect
 	github.com/getlantern/errors v1.0.4 // indirect
 	github.com/getlantern/golog v0.0.0-20230503153817-8e72de7e0a65 // indirect
@@ -36,7 +37,6 @@ require (
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
