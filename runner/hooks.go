@@ -73,7 +73,7 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 	return nil
 }
 
-// `hookType` - stringified hook type e.g. "pre-start".
+// `hookType` - stringified hook type e.g. "post-start-async".
 //
 // Returns an error if any error ocurred during startup of any hook.
 func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, anyHookErroredCh chan<- error, allHooksExitedCh chan<- struct{}) error {
