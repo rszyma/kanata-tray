@@ -31,7 +31,8 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 	wg := sync.WaitGroup{}
 	wg.Add(len(hooks))
 	errors := make([]error, len(hooks))
-	for _, hook := range hooks {
+	for hookIndex, hook := range hooks {
+		hookIndex := hookIndex
 		n := hookNum.Add(1)
 		log.Infof("Running %s hook [%d] '%#v'", hookType, n, hook)
 		hook := slices.Clone(hook)
@@ -48,15 +49,15 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
 			if err != nil {
-				errors[n] = fmt.Errorf("failed to run %s hook [%d]: %v", hookType, n, err)
+				errors[hookIndex] = fmt.Errorf("failed to run %s hook [%d]: %v", hookType, n, err)
 				return
 			}
 			err = cmd.Wait()
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil && ctxErr == context.DeadlineExceeded {
-					errors[n] = fmt.Errorf("hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)", n, timeout)
+					errors[hookIndex] = fmt.Errorf("hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)", n, timeout)
 				} else {
-					errors[n] = fmt.Errorf("hook [%d] failed with an error: %v", n, err)
+					errors[hookIndex] = fmt.Errorf("hook [%d] failed with an error: %v", n, err)
 				}
 				return
 			}
