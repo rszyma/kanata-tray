@@ -52,7 +52,7 @@ control_server_enable = true # (default: false)
 
 [defaults]
 kanata_executable = '~/bin/kanata' # if empty or omitted, system $PATH will be searched.
-kanata_config = '' # if empty or not omitted, kanata default config locations will be used.
+kanata_config = '' # if empty or omitted, kanata default config locations will be used.
 tcp_port = 5829 # (default: 5829)
 autorestart_on_crash = true # (default: false)
 
