@@ -116,6 +116,14 @@ func (p *preset) IntoExported(name string) (*Preset, error) {
 		case bool:
 			result.Autorun = autorunExpr
 		case string:
+			hostname := ""
+			if strings.Contains(autorunExpr, "hostname") {
+				h, err := os.Hostname()
+				if err != nil {
+					return nil, fmt.Errorf("while calling os.Hostname: %s", err)
+				}
+				hostname = h
+			}
 			env := map[string]any{
 				"linux":   runtime.GOOS == "linux",
 				"windows": runtime.GOOS == "windows",
@@ -123,6 +131,7 @@ func (p *preset) IntoExported(name string) (*Preset, error) {
 				"env": func(key string) string {
 					return os.Getenv(key)
 				},
+				"hostname": hostname,
 			}
 			program, err := expr.Compile(autorunExpr, expr.AsBool(), expr.Env(env))
 			if err != nil {
