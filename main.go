@@ -12,6 +12,7 @@ import (
 	"github.com/getlantern/systray"
 	"github.com/kirsle/configdir"
 	"github.com/labstack/gommon/log"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/pflag"
 
 	app_pkg "github.com/rszyma/kanata-tray/app"
@@ -20,6 +21,7 @@ import (
 	defaultconfig "github.com/rszyma/kanata-tray/config/default_config"
 	runner_pkg "github.com/rszyma/kanata-tray/runner"
 	"github.com/rszyma/kanata-tray/status_icons"
+	"github.com/rszyma/kanata-tray/stripansi"
 )
 
 var (
@@ -143,9 +145,12 @@ func mainImpl() error {
 	if err != nil {
 		log.SetOutput(logFile)
 	} else {
-		// FIXME: logger lib disables color output for tee here
-		// because it detects it's not directly a tty.
-		log.SetOutput(io.MultiWriter(logFile, os.Stderr))
+		log.SetOutput(io.MultiWriter(stripansi.StripANSIColorWriter(logFile), os.Stderr))
+		// The logger drops color for a MultiWriter, so re-enable
+		// it for a real terminal.
+		if isatty.IsTerminal(os.Stderr.Fd()) {
+			log.EnableColor()
+		}
 	}
 
 	log.Infof("kanata-tray [version=%s, commit=%s, build_date=%s] starting", buildVersion, buildHash, buildDate)
