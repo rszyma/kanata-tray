@@ -309,21 +309,25 @@ func (a *SystrayApp) Autorun() {
 
 func (a *SystrayApp) Cleanup() {
 	deadline := time.Now().Add(6 * time.Second)
+	var lastLog time.Time
 	for time.Now().Before(deadline) {
-		anyIsRunning := false
+		running := []string{}
 		for i := range a.presets {
 			switch a.statuses[i] {
 			case statusRunning, statusStarting:
-				anyIsRunning = true
+				running = append(running, a.presets[i].PresetName)
 				a.cancel(i)
 			case statusIdle, statusCrashed: // noop
 			}
 		}
-		if anyIsRunning {
-			time.Sleep(10 * time.Millisecond)
-		} else {
+		if len(running) == 0 {
 			return
 		}
+		if lastLog.IsZero() || time.Since(lastLog) >= time.Second {
+			log.Infof("waiting for presets to stop: %v", running)
+			lastLog = time.Now()
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	log.Warn("Cleanup deadline exceeded, releasing block")
 }
