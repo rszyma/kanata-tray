@@ -40,6 +40,7 @@
               ++ pkg.nativeBuildInputs
               ++ [
                 pkgs.go
+                pkgs.gopls
                 # converting png -> ico
                 #  convert input.png -define icon:auto-resize=48,32,16 output.ico
                 pkgs.imagemagick
