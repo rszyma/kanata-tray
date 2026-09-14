@@ -212,15 +212,11 @@ func (r *Kanata) ServerMessageCh() <-chan tcp_client.ServerMessage {
 
 // If currently there's no opened TCP connection, an error will be returned.
 func (r *Kanata) SendClientMessage(msg tcp_client.ClientMessage) error {
-	timeout := 200 * time.Millisecond
-	timer := time.NewTimer(timeout)
+	timeout := 1000 * time.Millisecond
 	select {
-	case <-timer.C:
+	case <-time.After(timeout):
 		return fmt.Errorf("timeouted after %d ms", timeout.Milliseconds())
 	case r.tcpClient.ClientMessageCh <- msg:
-		if !timer.Stop() {
-			<-timer.C
-		}
 	}
 	return nil
 }
