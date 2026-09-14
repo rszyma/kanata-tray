@@ -203,7 +203,11 @@ func (a *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder
 			}
 			a.cancel(i)
 			if runnerPipelineErr != nil {
-				log.Errorf("Kanata runner terminated with an error: %v", runnerPipelineErr)
+				kanataLogsFile := "<log file unavailable>"
+				if f := a.presetLogFiles[i]; f != nil {
+					kanataLogsFile = f.Name()
+				}
+				log.Errorf("Kanata runner terminated with an error: %v; see kanata logs at %s", runnerPipelineErr, kanataLogsFile)
 				a.setStatus(i, statusCrashed)
 				a.setIcon(status_icons.Crash)
 
