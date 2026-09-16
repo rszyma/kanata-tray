@@ -36,10 +36,10 @@ func WrapGenericResp[R any](
 ) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		reqCount := globalReqCount.Add(1)
-		log.Infof("[req=%d] request received: %s", reqCount, r.URL.Path)
+		log.Debugf("[req=%d] request received: %s", reqCount, r.URL.Path)
 		data, msg, err := fn(w, r)
 		if err != nil {
-			log.Errorf("[req=%d] request handling failed: %v", reqCount, err)
+			log.Warnf("[req=%d] request handling failed: %v", reqCount, err)
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(w, "%s", JsonMustMarshalIndent(GenericResponse[R]{
 				IsSuccess: false,

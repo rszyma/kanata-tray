@@ -30,24 +30,24 @@ func (c LayerIcons) IconForLayerName(presetName string, layerName string) *statu
 	preset, ok := c.presetIcons[presetName]
 	if ok {
 		if layerIcon, ok := preset.layerIcons[layerName]; ok {
-			log.Infof("Setting icon: preset:%s, layer:%s", presetName, layerName)
+			log.Debugf("Setting icon: preset:%s, layer:%s", presetName, layerName)
 			return &layerIcon
 		}
 	}
 	// global
 	layerIcon, ok := c.defaultIcons.layerIcons[layerName]
 	if ok {
-		log.Infof("Setting icon: preset:*, layer:%s", layerName)
+		log.Debugf("Setting icon: preset:*, layer:%s", layerName)
 		return &layerIcon
 	}
 	// preset_wildcard
 	if preset != nil && preset.wildcardIcon != nil {
-		log.Infof("Setting icon: preset:%s, layer:*", presetName)
+		log.Debugf("Setting icon: preset:%s, layer:*", presetName)
 		return preset.wildcardIcon
 	}
 	// global_wildcard
 	if c.defaultIcons.wildcardIcon != nil {
-		log.Infof("Setting icon: preset:*, layer:*")
+		log.Debug("Setting icon: preset:*, layer:*")
 		return c.defaultIcons.wildcardIcon
 	}
 	// default

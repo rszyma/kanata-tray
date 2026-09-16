@@ -87,7 +87,7 @@ func LoadCustomStatusIcons(configDir string) error {
 		}
 		path := filepath.Join(dir, filename)
 
-		log.Infof("loading status icon: %s (template: %v)", path, isTemplate)
+		log.Debugf("loading status icon: %s (template: %v)", path, isTemplate)
 		fileContent, err := os.ReadFile(path)
 		if err != nil {
 			log.Errorf("LoadCustomStatusIcons: os.ReadFile: %v", err)
