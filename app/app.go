@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -171,7 +172,6 @@ func (a *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder
 		case event := <-serverMessageCh:
 			log.Debugf("Received an event from kanata (preset=%s): %v, ", event.PresetName, pp.Sprint(event.Item))
 
-			// fmt.Printf("Received an event from kanata: %v\n", pp.Sprint(event))
 			if event.Item.LayerChange != nil {
 				icon := status_icons.Default
 				if layerIcon := a.layerIcons.IconForLayerName(event.PresetName, event.Item.LayerChange.NewLayer); layerIcon != nil {
@@ -201,13 +201,19 @@ func (a *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder
 				log.Errorf("Preset not found: %s", ret.PresetName)
 				continue
 			}
-			a.cancel(i)
+
+			a.cancel(i) // this may be noop; just making sure all it's cleaned up.
+
 			if runnerPipelineErr != nil {
-				kanataLogsFile := "<log file unavailable>"
-				if f := a.presetLogFiles[i]; f != nil {
-					kanataLogsFile = f.Name()
+				kanataLogInfoSuffix := ""
+				if errors.Is(runnerPipelineErr, runner_pkg.KanataCommandFailed) {
+					kanataLogsFile := "<log file unavailable>"
+					if f := a.presetLogFiles[i]; f != nil {
+						kanataLogsFile = f.Name()
+					}
+					kanataLogInfoSuffix = fmt.Sprintf("; see kanata logs at %s", kanataLogsFile)
 				}
-				log.Errorf("Kanata runner terminated with an error: %v; see kanata logs at %s", runnerPipelineErr, kanataLogsFile)
+				log.Errorf("Kanata runner terminated with an error: %v%s", runnerPipelineErr, kanataLogInfoSuffix)
 				a.setStatus(i, statusCrashed)
 				a.setIcon(status_icons.Crash)
 
@@ -328,7 +334,7 @@ func (a *SystrayApp) Cleanup() {
 			return
 		}
 		if lastLog.IsZero() || time.Since(lastLog) >= time.Second {
-			log.Infof("waiting for presets to stop: %v", running)
+			log.Debugf("waiting for presets to stop: %v", running)
 			lastLog = time.Now()
 		}
 		time.Sleep(10 * time.Millisecond)

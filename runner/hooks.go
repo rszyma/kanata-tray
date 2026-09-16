@@ -32,7 +32,6 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 	wg.Add(len(hooks))
 	errors := make([]error, len(hooks))
 	for hookIndex, hook := range hooks {
-		hookIndex := hookIndex
 		n := hookNum.Add(1)
 		log.Infof("Running %s hook [%d] '%#v'", hookType, n, hook)
 		hook := slices.Clone(hook)
@@ -61,7 +60,7 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 				}
 				return
 			}
-			log.Infof("%s [%d] exited OK", hookType, n)
+			log.Debugf("%s [%d] exited OK", hookType, n)
 		}()
 	}
 	wg.Wait()
@@ -107,7 +106,7 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 			err := cmd.Wait()
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
-					log.Warnf("hook [%d] was killed because of cancel signal: %v", n, ctxErr)
+					log.Debugf("hook [%d] was killed because of cancel signal", n)
 				} else {
 					log.Errorf("Hook [%d] failed with an error: %v", n, err)
 				}
@@ -117,7 +116,7 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 				}
 				return
 			}
-			log.Infof("%s [%d] exited OK", hookType, n)
+			log.Debugf("%s [%d] exited OK", hookType, n)
 		}()
 	}
 	return nil
