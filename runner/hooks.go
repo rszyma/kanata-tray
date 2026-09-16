@@ -31,7 +31,7 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 	wg := sync.WaitGroup{}
 	wg.Add(len(hooks))
 	errors := make([]error, len(hooks))
-	for _, hook := range hooks {
+	for hookIndex, hook := range hooks {
 		n := hookNum.Add(1)
 		log.Infof("Running %s hook [%d] '%#v'", hookType, n, hook)
 		hook := slices.Clone(hook)
@@ -48,19 +48,19 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
 			if err != nil {
-				errors[n] = fmt.Errorf("failed to run %s hook [%d]: %v", hookType, n, err)
+				errors[hookIndex] = fmt.Errorf("failed to run %s hook [%d]: %v", hookType, n, err)
 				return
 			}
 			err = cmd.Wait()
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil && ctxErr == context.DeadlineExceeded {
-					errors[n] = fmt.Errorf("hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)", n, timeout)
+					errors[hookIndex] = fmt.Errorf("hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)", n, timeout)
 				} else {
-					errors[n] = fmt.Errorf("hook [%d] failed with an error: %v", n, err)
+					errors[hookIndex] = fmt.Errorf("hook [%d] failed with an error: %v", n, err)
 				}
 				return
 			}
-			log.Infof("%s [%d] exited OK", hookType, n)
+			log.Debugf("%s [%d] exited OK", hookType, n)
 		}()
 	}
 	wg.Wait()
@@ -72,7 +72,7 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 	return nil
 }
 
-// `hookType` - stringified hook type e.g. "pre-start".
+// `hookType` - stringified hook type e.g. "post-start-async".
 //
 // Returns an error if any error ocurred during startup of any hook.
 func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, anyHookErroredCh chan<- error, allHooksExitedCh chan<- struct{}) error {
@@ -106,7 +106,7 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 			err := cmd.Wait()
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
-					log.Warnf("hook [%d] was killed because of cancel signal: %v", n, ctxErr)
+					log.Debugf("hook [%d] was killed because of cancel signal", n)
 				} else {
 					log.Errorf("Hook [%d] failed with an error: %v", n, err)
 				}
@@ -116,7 +116,7 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 				}
 				return
 			}
-			log.Infof("%s [%d] exited OK", hookType, n)
+			log.Debugf("%s [%d] exited OK", hookType, n)
 		}()
 	}
 	return nil

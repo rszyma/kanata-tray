@@ -122,7 +122,7 @@ func (r *Runner) Run(
 	go func() {
 		retCh := instance.RetCh()
 		serverMessageCh := instance.ServerMessageCh()
-		clientMesasgeCh := r.clientMessageChannels[presetName]
+		clientMessageCh := r.clientMessageChannels[presetName]
 		for {
 			select {
 			case ret := <-retCh:
@@ -136,7 +136,7 @@ func (r *Runner) Run(
 					Item:       msg,
 					PresetName: presetName,
 				}
-			case msg := <-clientMesasgeCh:
+			case msg := <-clientMessageCh:
 				instance.SendClientMessage(msg)
 			}
 		}

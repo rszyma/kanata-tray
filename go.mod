@@ -1,6 +1,6 @@
 module github.com/rszyma/kanata-tray
 
-go 1.21.0
+go 1.26
 
 // Regarding github.com/getlantern/systray - it's been not updated for 3+ years now, and
 // fyne.io/systray looks better maintained, but it has some issues (at least on linux):

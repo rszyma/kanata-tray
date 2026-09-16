@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,6 +37,8 @@ func NewKanata() *Kanata {
 	}
 }
 
+var KanataCommandFailed = errors.New("kanata exited with an error")
+
 func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string,
 	tcpPort int, hooks config.Hooks, extraArgs []string, extraEnv map[string]string, logFile *os.File,
 ) error {
@@ -44,7 +47,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		// FIXME: kanata.exe on Windows?
 		kanataExecutable, err = exec.LookPath("kanata")
 		if err != nil {
-			return err
+			return fmt.Errorf("while looking up PATH: %s", err)
 		}
 	}
 
@@ -83,7 +86,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			return
 		}
 
-		log.Infof("Running command: %s", r.cmd.String())
+		log.Debugf("Running command: %s", r.cmd.String())
 
 		err = r.cmd.Start()
 		if err != nil {
@@ -109,7 +112,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			time.Sleep(25 * time.Millisecond)
 		}
 		if !online {
-			log.Errorf("Waiting for kanata TCP server timed out. Bug?")
+			log.Warnf("Couldn't establish connection to kanata via TCP; continuing with reduced functionality")
 		}
 
 		go func() {
@@ -128,13 +131,15 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			}
 		}()
 
-		// Send request for layer names. We may or may not get response
-		// depending on kanata version). The support for it was implemented in:
-		// https://github.com/jtroo/kanata/commit/d66c3c77bcb3acbf58188272177d64bed4130b6e
-		err = r.SendClientMessage(tcp_client.ClientMessage{RequestLayerNames: struct{}{}})
-		if err != nil {
-			log.Errorf("Failed to send ClientMessage: %v", err)
-			// this is non-critical, so we continue
+		if online {
+			// Send request for layer names. We may or may not get response
+			// depending on kanata version). The support for it was implemented in:
+			// https://github.com/jtroo/kanata/commit/d66c3c77bcb3acbf58188272177d64bed4130b6e
+			err = r.SendClientMessage(tcp_client.ClientMessage{RequestLayerNames: struct{}{}})
+			if err != nil {
+				log.Errorf("Failed to send TCP ClientMessage: %v", err)
+				// We can continue, but we won't have TCP comms.
+			}
 		}
 
 		err = runAllBlockingHooks(hooks.PostStart, "post-start")
@@ -163,12 +168,13 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		cmdErr := r.cmd.Wait() // block until kanata exits
 		r.cmd = nil
 
+		log.Debugf("kanata process terminated, cleaning up")
 		if len(hooks.PostStartAsync) > 0 {
-			log.Infof("Waiting for all post-start-async hooks to exit")
+			log.Debugf("Waiting for all post-start-async hooks to exit")
 		}
 		<-allPostStartAsyncHooksExitedCh
 		if len(hooks.PostStartAsync) > 0 {
-			log.Infof("All post-start-async hooks exited")
+			log.Debugf("All post-start-async hooks exited")
 		}
 
 		err = runAllBlockingHooks(hooks.PostStop, "post-stop")
@@ -212,15 +218,11 @@ func (r *Kanata) ServerMessageCh() <-chan tcp_client.ServerMessage {
 
 // If currently there's no opened TCP connection, an error will be returned.
 func (r *Kanata) SendClientMessage(msg tcp_client.ClientMessage) error {
-	timeout := 200 * time.Millisecond
-	timer := time.NewTimer(timeout)
+	timeout := 1000 * time.Millisecond
 	select {
-	case <-timer.C:
+	case <-time.After(timeout):
 		return fmt.Errorf("timeouted after %d ms", timeout.Milliseconds())
 	case r.tcpClient.ClientMessageCh <- msg:
-		if !timer.Stop() {
-			<-timer.C
-		}
 	}
 	return nil
 }
