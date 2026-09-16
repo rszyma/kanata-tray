@@ -221,7 +221,7 @@ func mainImpl() error {
 
 	go func() {
 		sig := <-sigCh
-		log.Infof("Received exit signal (%s)", sig)
+		log.Warnf("Received exit signal (%s)", sig)
 		app.Cleanup()
 		os.Exit(1)
 	}()
