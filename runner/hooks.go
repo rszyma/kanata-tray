@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -30,7 +31,7 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 	defer cancel()
 	wg := sync.WaitGroup{}
 	wg.Add(len(hooks))
-	errors := make([]error, len(hooks))
+	errs := make([]error, len(hooks))
 	for hookIndex, hook := range hooks {
 		n := hookNum.Add(1)
 		log.Infof("Running %s hook [%d] '%#v'", hookType, n, hook)
@@ -48,15 +49,20 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
 			if err != nil {
-				errors[hookIndex] = fmt.Errorf("failed to run %s hook [%d]: %v", hookType, n, err)
+				errs[hookIndex] = fmt.Errorf("failed to run %s hook [%d]: %v", hookType, n, err)
 				return
 			}
 			err = cmd.Wait()
 			if err != nil {
-				if ctxErr := ctx.Err(); ctxErr != nil && ctxErr == context.DeadlineExceeded {
-					errors[hookIndex] = fmt.Errorf("hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)", n, timeout)
-				} else {
-					errors[hookIndex] = fmt.Errorf("hook [%d] failed with an error: %v", n, err)
+				switch {
+				case errors.Is(err, context.DeadlineExceeded):
+					errs[hookIndex] = fmt.Errorf(
+						"hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)",
+						n, timeout)
+				case errors.Is(err, context.Canceled):
+					log.Infof("hook [%d] was killed because of cancel signal", n)
+				default:
+					errs[hookIndex] = fmt.Errorf("hook [%d] failed with an error: %v", n, err)
 				}
 				return
 			}
@@ -64,7 +70,7 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 		}()
 	}
 	wg.Wait()
-	for _, err := range errors {
+	for _, err := range errs {
 		if err != nil {
 			return err
 		}
@@ -105,14 +111,14 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 			defer wg.Done()
 			err := cmd.Wait()
 			if err != nil {
-				if ctxErr := ctx.Err(); ctxErr != nil {
-					log.Debugf("hook [%d] was killed because of cancel signal", n)
+				if errors.Is(err, context.Canceled) {
+					log.Infof("hook [%d] was killed because of cancel signal", n)
 				} else {
 					log.Errorf("Hook [%d] failed with an error: %v", n, err)
-				}
-				if !anyHookErrored {
-					anyHookErrored = true
-					anyHookErroredCh <- err
+					if !anyHookErrored {
+						anyHookErrored = true
+						anyHookErroredCh <- err
+					}
 				}
 				return
 			}
