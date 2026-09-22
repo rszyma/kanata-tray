@@ -291,9 +291,10 @@ func (a *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder
 			open.Start(a.logFilepath)
 		case <-a.mQuit.ClickedCh:
 			log.Info("Clicked \"Exit tray button\", exiting.")
-			a.Cleanup()
-			systray.Quit()
-			return
+			go func() {
+				a.Cleanup()
+				os.Exit(1)
+			}()
 		}
 	}
 }
