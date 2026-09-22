@@ -57,12 +57,12 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 				switch {
 				case errors.Is(err, context.DeadlineExceeded):
 					errs[hookIndex] = fmt.Errorf(
-						"hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)",
-						n, timeout)
+						"%s hook [%d] was killed because it exceeded maximum allowed runtime for non-async hooks (%s)",
+						hookType, n, timeout)
 				case errors.Is(err, context.Canceled):
-					log.Infof("hook [%d] was killed because of cancel signal", n)
+					log.Infof("%s hook [%d] was killed because of cancel signal", hookType, n)
 				default:
-					errs[hookIndex] = fmt.Errorf("hook [%d] failed with an error: %v", n, err)
+					errs[hookIndex] = fmt.Errorf("%s hook [%d] failed with an error: %v", hookType, n, err)
 				}
 				return
 			}
@@ -78,11 +78,10 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 	return nil
 }
 
-// `hookType` - stringified hook type e.g. "pre-start".
-//
-// Returns an error if any error ocurred during startup of any hook.
-func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, anyHookErroredCh chan<- error, allHooksExitedCh chan<- struct{}) error {
-	anyHookErrored := false
+// `hookType` - stringified hook type e.g. "post-start-async".
+func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string) (allHooksExitedCh chan struct{}, anyHookErroredCh chan struct{}) {
+	allHooksExitedCh = make(chan struct{}, 1)
+	anyHookErroredCh = make(chan struct{}, len(hooks))
 	wg := sync.WaitGroup{}
 	wg.Add(len(hooks))
 	go func() {
@@ -105,27 +104,26 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, an
 		err := cmd.Start()
 		if err != nil {
 			log.Errorf("Failed to run %s hook [%d]: %v", hookType, n, err)
-			return err
+			wg.Done()
+			anyHookErroredCh <- struct{}{}
+			return allHooksExitedCh, anyHookErroredCh
 		}
 		go func() {
 			defer wg.Done()
 			err := cmd.Wait()
 			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					log.Infof("hook [%d] was killed because of cancel signal", n)
+				if errors.Is(ctx.Err(), context.Canceled) {
+					log.Infof("%s hook [%d] was killed because of cancel signal", hookType, n)
 				} else {
-					log.Errorf("Hook [%d] failed with an error: %v", n, err)
-					if !anyHookErrored {
-						anyHookErrored = true
-						anyHookErroredCh <- err
-					}
+					log.Errorf("%s hook [%d] failed with an error: %v", hookType, n, err)
+					anyHookErroredCh <- struct{}{}
 				}
 				return
 			}
 			log.Debugf("%s [%d] exited OK", hookType, n)
 		}()
 	}
-	return nil
+	return allHooksExitedCh, anyHookErroredCh
 }
 
 func makeLogWrapWriter(prefixes ...string) io.Writer {
