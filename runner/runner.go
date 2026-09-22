@@ -167,9 +167,9 @@ func (r *Runner) ServerMessageCh() <-chan ItemAndPresetName[tcp_client.ServerMes
 
 func cmd(ctx context.Context, stdout io.Writer, stderr io.Writer, name string, args []string, extraEnv map[string]string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.WaitDelay = 3 * time.Second
+	cmd.WaitDelay = 100 * time.Millisecond
 	cmd.SysProcAttr = os_specific.ProcessAttr
-	// cmd.Stdin = os.Stdin
+	cmd.Stdin = nil
 	if stdout != nil {
 		cmd.Stdout = stdout
 	}
