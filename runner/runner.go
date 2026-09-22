@@ -112,24 +112,19 @@ func (r *Runner) Run(
 	r.clientMessageChannels[presetName] = make(chan tcp_client.ClientMessage)
 
 	go func() {
-		<-ctx.Done()
-		r.instancesMappingLock.Lock()
-		defer r.instancesMappingLock.Unlock()
-		delete(r.activeKanataInstances, presetName)
-		delete(r.clientMessageChannels, presetName)
-	}()
-
-	go func() {
-		retCh := instance.RetCh()
 		serverMessageCh := instance.ServerMessageCh()
 		clientMesasgeCh := r.clientMessageChannels[presetName]
 		for {
 			select {
-			case ret := <-retCh:
+			case retErr := <-instance.RetCh:
 				r.retCh <- ItemAndPresetName[error]{
-					Item:       ret,
+					Item:       retErr,
 					PresetName: presetName,
 				}
+				r.instancesMappingLock.Lock()
+				defer r.instancesMappingLock.Unlock()
+				delete(r.activeKanataInstances, presetName)
+				delete(r.clientMessageChannels, presetName)
 				return
 			case msg := <-serverMessageCh:
 				r.serverMessageCh <- ItemAndPresetName[tcp_client.ServerMessage]{

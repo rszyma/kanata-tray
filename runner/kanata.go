@@ -22,7 +22,13 @@ type Kanata struct {
 	// This must be written to, to free an internal slot.
 	processSlotCh chan struct{}
 
-	retCh     chan error // Returns the error returned by `cmd.Wait()`
+	// A *single-message* channel, that await an error to be send from the runner.
+	// If such error is received, the control is passed down the stack (via this channel),
+	// which then calls cancel(), which in turn cancels all goroutines up the stack (in this module).
+	//
+	// nil is send if the work finished without an error.
+	RetCh chan error
+
 	cmd       *exec.Cmd
 	tcpClient *tcp_client.KanataTcpClient
 }
@@ -31,13 +37,15 @@ func NewKanata() *Kanata {
 	return &Kanata{
 		processSlotCh: make(chan struct{}, 1),
 
-		retCh:     make(chan error),
+		RetCh:     make(chan error),
 		cmd:       nil,
 		tcpClient: tcp_client.NewTcpClient(),
 	}
 }
 
 var KanataCommandFailed = errors.New("kanata exited with an error")
+var PostStopHookFailed = errors.New("post-stop hook failed")
+var PostStartAsyncHookFailed = errors.New("post-start-async hook failed")
 
 func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, kanataConfig string,
 	tcpPort int, hooks config.Hooks, extraArgs []string, extraEnv map[string]string, logFile *os.File,
@@ -47,7 +55,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		// FIXME: kanata.exe on Windows?
 		kanataExecutable, err = exec.LookPath("kanata")
 		if err != nil {
-			return err
+			return fmt.Errorf("while looking up PATH: %v", err)
 		}
 	}
 
@@ -63,10 +71,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 
 	cmd := cmd(ctx, nil, nil, kanataExecutable, allArgs, extraEnv)
 
-	go func() {
-		selfCtx, selfCancel := context.WithCancelCause(ctx)
-		defer selfCancel(nil)
-
+	runWorker := func() error {
 		// We're waiting for previous process to be marked as finished.
 		// We will know that happens when the process slot becomes writable.
 		r.processSlotCh <- struct{}{}
@@ -82,134 +87,104 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 
 		err = runAllBlockingHooks(hooks.PreStart, "pre-start")
 		if err != nil {
-			r.retCh <- fmt.Errorf("runAllBlockingHooks: %s", err)
-			return
+			return fmt.Errorf("runAllBlockingHooks: %v", err)
 		}
 
 		log.Debugf("Running command: %s", r.cmd.String())
 
 		err = r.cmd.Start()
 		if err != nil {
-			r.retCh <- fmt.Errorf("failed to start process: %v", err)
-			return
+			return fmt.Errorf("failed to start process: %v", err)
 		}
 
 		log.Infof("Started kanata (pid=%d)", r.cmd.Process.Pid)
 
-		// Short poll for kanata tcp server to be up.
-		// Default wait time in kanata is 2000ms, but can be disabled with --nodelay, so hardcoding delay here is not good.
-		online := false
-		deadline := time.Now().Add(time.Millisecond * 5000)
-		for time.Now().Before(deadline) {
-			ctx, cancel := context.WithTimeout(selfCtx, 25*time.Millisecond)
-			err := r.tcpClient.Connect(ctx, tcpPort)
+		// NOTE: Default wait time in kanata is 2000ms, so we need to wait at least this much.
+		// TODO: check if --wait-device-ms delays TCP server start.
+		initialConnectErr := r.tcpClient.StartInBackground(ctx, tcpPort, 5000*time.Millisecond)
+
+		select {
+		case err := <-initialConnectErr:
 			if err == nil {
-				online = true
-				defer cancel() // yes, this is a defer in a for loop. It should clean up only after the whole function returns.
-				break
-			}
-			cancel()
-			time.Sleep(25 * time.Millisecond)
-		}
-		if !online {
-			log.Warnf("Couldn't establish connection to kanata via TCP; continuing with reduced functionality")
-		}
-
-		go func() {
-			// Loop in order to reconnect when kanata disconnects us.
-			// We might be disconnected if an older version of kanata is used.
-			for {
-				select {
-				case <-selfCtx.Done():
-					return
-				case <-r.tcpClient.Reconnect:
-					err := r.tcpClient.Connect(selfCtx, tcpPort)
-					if err != nil {
-						log.Errorf("Failed to connect to kanata via TCP: %v", err)
-					}
+				// Send request for layer names. We may or may not get response,
+				// depending on the kanata version. The support for it was implemented in:
+				// https://github.com/jtroo/kanata/commit/d66c3c77bcb3acbf58188272177d64bed4130b6e
+				err = r.SendClientMessage(tcp_client.ClientMessage{RequestLayerNames: struct{}{}})
+				if err != nil {
+					log.Warnf("sending RequestLayerNames failed: %v (kanata old version too old?); icons-to-layers mapping will not be validated.", err)
 				}
+			} else if errors.Is(ctx.Err(), context.Canceled) {
+				return nil
+			} else {
+				log.Warnf("Couldn't establish connection to kanata via TCP; continuing with reduced functionality; error: %v", err)
 			}
-		}()
-
-		if online {
-			// Send request for layer names. We may or may not get response
-			// depending on kanata version). The support for it was implemented in:
-			// https://github.com/jtroo/kanata/commit/d66c3c77bcb3acbf58188272177d64bed4130b6e
-			err = r.SendClientMessage(tcp_client.ClientMessage{RequestLayerNames: struct{}{}})
-			if err != nil {
-				log.Errorf("Failed to send TCP ClientMessage: %v", err)
-				// We can continue, but we won't have TCP comms.
-			}
+		case <-ctx.Done():
+			return nil
 		}
 
 		err = runAllBlockingHooks(hooks.PostStart, "post-start")
 		if err != nil {
-			r.retCh <- fmt.Errorf("runAllBlockingHooks: %s", err)
-			return
-		}
-		anyPostStartAsyncHookErroredCh := make(chan error, 1)
-		allPostStartAsyncHooksExitedCh := make(chan struct{}, 1)
-		err = runAllAsyncHooks(selfCtx, hooks.PostStartAsync, "post-start-async", anyPostStartAsyncHookErroredCh, allPostStartAsyncHooksExitedCh)
-		if err != nil {
-			r.retCh <- fmt.Errorf("hook failed: %s", err)
-			return
+			return fmt.Errorf("runAllBlockingHooks: %v", err)
 		}
 
+		ctxAsyncHooks, asyncHooksCancel := context.WithCancel(ctx)
+		defer asyncHooksCancel()
+		allPostStartAsyncHooksExitedCh, anyHookErroredCh := runAllAsyncHooks(ctxAsyncHooks, hooks.PostStartAsync, "post-start-async")
+
+		cmdWaitCh := make(chan error, 1)
 		go func() {
-			select {
-			case <-selfCtx.Done():
-				return
-			case err := <-anyPostStartAsyncHookErroredCh:
-				log.Errorf("An async hook errored, stopping preset.")
-				selfCancel(err)
-			}
+			cmdWaitCh <- cmd.Wait()
 		}()
 
-		cmdErr := r.cmd.Wait() // block until kanata exits
-		r.cmd = nil
-
-		log.Debugf("kanata process terminated, cleaning up")
-		if len(hooks.PostStartAsync) > 0 {
-			log.Debugf("Waiting for all post-start-async hooks to exit")
+		var cmdWaitInterruptedErr error
+		select {
+		case cmdWaitInterruptedErr = <-cmdWaitCh:
+		case <-anyHookErroredCh:
+			cmdWaitInterruptedErr = PostStartAsyncHookFailed
 		}
-		<-allPostStartAsyncHooksExitedCh
+
+		log.Debugf("kanata cmd wait interrupted, cleaning up")
+
 		if len(hooks.PostStartAsync) > 0 {
+			asyncHooksCancel()
+			log.Debugf("Waiting for all post-start-async hooks to exit")
+			<-allPostStartAsyncHooksExitedCh
 			log.Debugf("All post-start-async hooks exited")
 		}
 
 		err = runAllBlockingHooks(hooks.PostStop, "post-stop")
 		if err != nil {
-			r.retCh <- fmt.Errorf("hook failed: %s", err)
-			return
+			err1 := fmt.Errorf("%w: %v", PostStopHookFailed, err)
+			if cmdWaitInterruptedErr != nil {
+				log.Error(err1)
+			} else {
+				return err1
+			}
 		}
 
-		selfCtxErr := selfCtx.Err()
-		if selfCtxErr != nil && selfCtxErr != context.DeadlineExceeded && selfCtxErr != context.Canceled {
-			// must be an error from async hook
-			r.retCh <- selfCtxErr
-			return
-		}
-
-		if ctx.Err() == context.Canceled {
+		if errors.Is(ctx.Err(), context.Canceled) {
 			// kill was issued from outside
-			r.retCh <- nil
-			return
+			return nil
 		}
 
-		if cmdErr != nil {
+		if cmdWaitInterruptedErr == PostStartAsyncHookFailed {
+			return PostStartAsyncHookFailed
+		}
+		if cmdWaitInterruptedErr != nil {
 			// kanata crashed or terminated itself
-			r.retCh <- cmdErr
-			return
+			return fmt.Errorf("%w: %v", KanataCommandFailed, cmdWaitInterruptedErr)
 		}
 
-		r.retCh <- nil
+		return nil
+	}
+
+	go func() {
+		err := runWorker()
+		r.cmd = nil
+		r.RetCh <- err
 	}()
 
 	return nil
-}
-
-func (r *Kanata) RetCh() <-chan error {
-	return r.retCh
 }
 
 func (r *Kanata) ServerMessageCh() <-chan tcp_client.ServerMessage {

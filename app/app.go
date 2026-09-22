@@ -22,7 +22,7 @@ type SystrayApp struct {
 
 	concurrentPresets bool
 
-	// Used when `concurrentPresets` is disabled.
+	// Used when `concurrentPresets` is disabled and switching from another running preset.
 	// Value -1 denotes that no config is scheduled to run.
 	scheduledPresetIndex int
 
@@ -204,7 +204,7 @@ func (a *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder
 
 			a.cancel(i) // this may be noop; just making sure all it's cleaned up.
 
-			if runnerPipelineErr != nil {
+			if !(runnerPipelineErr == nil || errors.Is(runnerPipelineErr, context.Canceled)) {
 				kanataLogInfoSuffix := ""
 				if errors.Is(runnerPipelineErr, runner_pkg.KanataCommandFailed) {
 					kanataLogsFile := "<log file unavailable>"
@@ -217,7 +217,8 @@ func (a *SystrayApp) StartProcessingLoop(runner *runner_pkg.Runner, configFolder
 				a.setStatus(i, statusCrashed)
 				a.setIcon(status_icons.Crash)
 
-				if a.presets[i].Preset.AutorestartOnCrash {
+				// exclude PostStopHookFailed from autorestart-on-crash, to not fall into a restart loop.
+				if a.presets[i].Preset.AutorestartOnCrash && !errors.Is(runnerPipelineErr, runner_pkg.PostStopHookFailed) {
 					attemptCount, isAllowed := a.presetAutorestartLimiter[i].BeginAttempt()
 					if isAllowed {
 						log.Infof("[autorestart-on-crash] Restarting [%d/%d]", attemptCount, AutorestartLimit)
