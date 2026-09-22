@@ -57,3 +57,7 @@ e.g. `bash -c './my-long-running-program & && sleep 3'` or run it from `post-sta
 Async (non-blocking) hooks. Unlike non-async hooks, they don't block waiting for command program to finish, but run in background.
 Currenly there's only one: `post-start-async`. It's useful when you want a neat way
 to run your long-running programs, but also want to terminate it when preset exits.
+
+### Debugging hooks
+
+You can see output (stdout and stderr) of hooks if you run kanata-tray with `--log-level 1` flag.
