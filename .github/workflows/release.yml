@@ -8,10 +8,10 @@ jobs:
   release_linux_windows:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v7
         with:
           go-version: "1.21"
 
@@ -30,7 +30,7 @@ jobs:
           just build_release_windows $version
 
       - name: Upload Linux and Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-windows-artifacts
           path: |
@@ -40,11 +40,15 @@ jobs:
   release_darwin:
     needs: release_linux_windows
     runs-on: macos-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v7
         with:
           go-version: "1.21"
 
@@ -52,7 +56,7 @@ jobs:
         uses: taiki-e/install-action@just
 
       - name: Download Linux and Windows artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: linux-windows-artifacts
           path: dist
@@ -67,10 +71,19 @@ jobs:
           cd ./dist
           for file in kanata-tray*; do shasum -a 256 "$file"; done > sha256sums
 
-      - name: Release
-        uses: softprops/action-gh-release@v1
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
         with:
-          draft: false
+          subject-path: |
+            ./dist/kanata-tray.exe
+            ./dist/kanata-tray-linux
+            ./dist/kanata-tray-macos
+
+      # Draft, so that release notes can be written before a manual publish.
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
           prerelease: false
           files: |
             ./dist/kanata-tray.exe
