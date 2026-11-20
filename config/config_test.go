@@ -1,12 +1,100 @@
 package config_test
 
 import (
+	_ "embed"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/rszyma/kanata-tray/config"
+	defaultconfig "github.com/rszyma/kanata-tray/config/default_config"
+	"github.com/rszyma/kanata-tray/lib"
 )
+
+//go:embed testdata/config_sample_toml10.toml
+var cfgSampleToml10 string
+
+// Wraps a hook command in the default `cmd_template` of the current OS.
+func defaultHookCmd(cmd string) []string {
+	if runtime.GOOS == "windows" {
+		return []string{cmd}
+	}
+	return []string{"/bin/sh", "-c", cmd}
+}
+
+func TestParseConfig(t *testing.T) {
+	cmpTransformer := cmpopts.AcyclicTransformer("OrderedMapToEntries",
+		func(m *lib.OrderedMap[string, *config.Preset]) []lib.Entry[string, *config.Preset] {
+			return m.Entries()
+		},
+	)
+
+	// Result of parsing an empty config file.
+	wantDefault := &config.Config{
+		PresetDefaults: config.Preset{TcpPort: 5829},
+		General:        config.GeneralConfigOptions{ControlServerPort: 8100},
+		Presets: lib.NewOrderedMapFromIter([]lib.Entry[string, *config.Preset]{
+			{Key: "Default Preset", Value: &config.Preset{TcpPort: 5829}},
+		}),
+	}
+
+	// Result of parsing each of the testdata/config_sample_*.toml files.
+	wantSample := &config.Config{
+		PresetDefaults: config.Preset{
+			TcpPort:    5829,
+			LayerIcons: map[string]string{"*": "other.ico", "mouse": "mouse.png"},
+			ExtraArgs:  []string{"--nodelay"},
+		},
+		General: config.GeneralConfigOptions{
+			ControlServerEnable: true,
+			ControlServerPort:   8100,
+		},
+		Presets: lib.NewOrderedMapFromIter([]lib.Entry[string, *config.Preset]{
+			{
+				Key: "with hooks",
+				Value: &config.Preset{
+					Autorun:   true,
+					TcpPort:   5829,
+					Hooks:     config.Hooks{PreStart: [][]string{defaultHookCmd("notify-send hi")}},
+					ExtraArgs: []string{"--nodelay"},
+					ExtraEnv:  map[string]string{"FOO": "1"},
+				},
+			},
+			{
+				Key: "plain",
+				Value: &config.Preset{
+					KanataConfig: "test.kbd",
+					TcpPort:      5829,
+					ExtraArgs:    []string{"--nodelay"},
+				},
+			},
+		}),
+	}
+
+	tests := []struct {
+		name    string
+		cfgText string
+		want    *config.Config
+	}{
+		{"empty config", "", wantDefault},
+		{"unknown config entry is ignored", "general.unknown_option_123 = true\n", wantDefault},
+		{"sample config in TOML v1.0", cfgSampleToml10, wantSample},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := config.ParseConfig(tt.cfgText, defaultconfig.DefaultConfigContent)
+			if err != nil {
+				t.Fatalf("config.ParseConfig: %v", err)
+			}
+			if diff := cmp.Diff(tt.want, got, cmpTransformer); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
 
 func TestParseAutorunBool(t *testing.T) {
 	cfgText := `

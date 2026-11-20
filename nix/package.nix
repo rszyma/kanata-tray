@@ -16,7 +16,7 @@ buildGoModule (finalAttrs: {
 
   src = lib.cleanSource ./..;
 
-  vendorHash = "sha256-X4O+6Vmei6Y/8ARLCt2MJpQT+GZyLh333R5SjegeMqc=";
+  vendorHash = "sha256-v3BTwSk3edYMXIXFC4z9caDUwe19rvWE0DxsXIrFDxE=";
 
   flags = [ "-trimpath" ];
 
