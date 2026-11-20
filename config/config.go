@@ -7,13 +7,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/elliotchance/orderedmap/v2"
 	"github.com/expr-lang/expr"
 	"github.com/k0kubun/pp/v3"
 	"github.com/kr/pretty"
 	"github.com/labstack/gommon/log"
 	"github.com/pelletier/go-toml/v2"
 	tomlu "github.com/pelletier/go-toml/v2/unstable"
+	"github.com/rszyma/kanata-tray/lib"
 
 	_ "embed"
 )
@@ -21,7 +21,7 @@ import (
 type Config struct {
 	PresetDefaults Preset
 	General        GeneralConfigOptions
-	Presets        *OrderedMap[string, *Preset]
+	Presets        *lib.OrderedMap[string, *Preset]
 }
 
 type Preset struct {
@@ -345,7 +345,7 @@ func ParseConfig(cfgText string, cfgDefaultText string) (*Config, error) {
 	var cfg2 *Config = &Config{
 		PresetDefaults: *defaultsExported,
 		General:        cfg.General.IntoExported(),
-		Presets:        NewOrderedMap[string, *Preset](),
+		Presets:        lib.NewOrderedMap[string, *Preset](),
 	}
 
 	for _, presetName := range presetNames {
@@ -406,42 +406,4 @@ func keyAsStrings(it tomlu.Iterator) []string {
 		parts = append(parts, string(n.Data))
 	}
 	return parts
-}
-
-type OrderedMap[K string, V fmt.GoStringer] struct {
-	*orderedmap.OrderedMap[K, V]
-}
-
-func NewOrderedMap[K string, V fmt.GoStringer]() *OrderedMap[K, V] {
-	return &OrderedMap[K, V]{
-		OrderedMap: orderedmap.NewOrderedMap[K, V](),
-	}
-}
-
-// impl `fmt.GoStringer`
-func (m *OrderedMap[K, V]) GoString() string {
-	indent := "    "
-	keys := []K{}
-	values := []V{}
-	for it := m.Front(); it != nil; it = it.Next() {
-		keys = append(keys, it.Key)
-		values = append(values, it.Value)
-	}
-	builder := strings.Builder{}
-	builder.WriteString("{")
-	for i := range keys {
-		key := keys[i]
-		value := values[i]
-		valueLines := strings.Split(value.GoString(), "\n")
-		for i, vl := range valueLines {
-			if i == 0 {
-				continue
-			}
-			valueLines[i] = fmt.Sprintf("%s%s", indent, vl)
-		}
-		indentedVal := strings.Join(valueLines, "\n")
-		builder.WriteString(fmt.Sprintf("\n%s\"%s\": %s", indent, key, indentedVal))
-	}
-	builder.WriteString("\n}")
-	return builder.String()
 }
