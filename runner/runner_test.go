@@ -34,3 +34,21 @@ func TestCmdCancelSendsSIGTERM(t *testing.T) {
 	}
 	_ = c.Wait()
 }
+
+// Hooks must get the extra environment variables, e.g. KANATA_PID.
+func TestHooksGetEnv(t *testing.T) {
+	env := map[string]string{"KANATA_PID": "1234"}
+	hooks := [][]string{{"/bin/sh", "-c", `test "$KANATA_PID" = 1234`}}
+
+	if err := runAllBlockingHooks(hooks, "post-start", env); err != nil {
+		t.Errorf("blocking hook: %v", err)
+	}
+
+	exitedCh, erroredCh := runAllAsyncHooks(context.Background(), hooks, "post-start-async", env)
+	<-exitedCh
+	select {
+	case <-erroredCh:
+		t.Errorf("async hook failed")
+	default:
+	}
+}

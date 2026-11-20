@@ -58,6 +58,23 @@ Async (non-blocking) hooks. Unlike non-async hooks, they don't block waiting for
 Currenly there's only one: `post-start-async`. It's useful when you want a neat way
 to run your long-running programs, but also want to terminate it when preset exits.
 
+### Environment variables
+
+kanata-tray sets these environment variables for the hook processes:
+
+- `KANATA_PID` - process ID of the started kanata process.
+  NOTE: If `kanata_executable` is a wrapper (e.g. a script or `sudo`), this is the PID of the wrapper.
+
+Example: give kanata real-time priority after it starts (Linux):
+
+```toml
+[defaults.hooks]
+post-start = ['chrt -f -p 50 "$KANATA_PID"']
+```
+
+On Windows, the default `cmd_template` (`["{}"]`) does not use a shell, so `$KANATA_PID` is not expanded.
+Use a shell in `cmd_template`, e.g. `["powershell", "-Command", "{}"]`, and read the value with `$env:KANATA_PID`.
+
 ### Debugging hooks
 
 You can see output (stdout and stderr) of hooks if you run kanata-tray with `--log-level 1` flag.
