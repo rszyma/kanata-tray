@@ -17,6 +17,9 @@ import (
 //go:embed testdata/config_sample_toml10.toml
 var cfgSampleToml10 string
 
+//go:embed testdata/config_sample_toml11.toml
+var cfgSampleToml11 string
+
 // Wraps a hook command in the default `cmd_template` of the current OS.
 func defaultHookCmd(cmd string) []string {
 	if runtime.GOOS == "windows" {
@@ -82,6 +85,7 @@ func TestParseConfig(t *testing.T) {
 		{"empty config", "", wantDefault},
 		{"unknown config entry is ignored", "general.unknown_option_123 = true\n", wantDefault},
 		{"sample config in TOML v1.0", cfgSampleToml10, wantSample},
+		{"sample config in TOML v1.1", cfgSampleToml11, wantSample},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -181,5 +185,55 @@ func TestParseAutorunExprFailsOnUndefinedVariable(t *testing.T) {
 		}
 	} else {
 		t.Errorf("should fail, but succeeded with: %v", cfg)
+	}
+}
+
+func TestParsePresetsOrder(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfgText string
+		want    []string
+	}{
+		{
+			name: "tables and keys in presets table",
+			cfgText: `
+			[presets.a]
+			[presets.b.hooks]
+			[presets]
+			c = { kanata_config = "x" }
+			d.kanata_config = "x"
+			[presets.a.hooks]
+			[presets.e]
+			`,
+			want: []string{"a", "b", "c", "d", "e"},
+		},
+		{
+			name: "dotted keys",
+			cfgText: `
+			presets.b.kanata_config = "x"
+			presets.a = {}
+			`,
+			want: []string{"b", "a"},
+		},
+		{
+			name:    "inline table",
+			cfgText: `presets = { b = {}, a.kanata_config = "x" }`,
+			want:    []string{"b", "a"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := config.ParseConfig(tt.cfgText, defaultconfig.DefaultConfigContent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := []string{}
+			for _, entry := range cfg.Presets.Entries() {
+				got = append(got, entry.Key)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
