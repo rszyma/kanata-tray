@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/getlantern/systray"
@@ -69,6 +70,15 @@ func main() {
 		fmt.Printf("Arch: %s\n", runtime.GOARCH)
 		os.Exit(1)
 	}
+
+	// Write panics to the log file too, because stderr is not available
+	// in some cases (e.g. Windows GUI build, autostart).
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("kanata-tray panicked: %v\n%s", r, debug.Stack())
+			panic(r)
+		}
+	}()
 
 	err := mainImpl()
 	if err != nil {
