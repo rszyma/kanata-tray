@@ -9,5 +9,5 @@ result
 *.kbd
 kanata-tray.*toml*
 /kanata
-!default_config.toml
+!config/**/*.toml
 fake-kanata.sh
