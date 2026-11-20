@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/rszyma/kanata-tray/config"
+	"github.com/rszyma/kanata-tray/lib"
 )
 
 func TestResolveIconsTemplateSuffix(t *testing.T) {
@@ -33,7 +34,7 @@ func TestResolveIconsTemplateSuffix(t *testing.T) {
 				"*":      "allTemplate.png",
 			},
 		},
-		Presets: config.NewOrderedMap[string, *config.Preset](),
+		Presets: lib.NewOrderedMap[string, *config.Preset](),
 	}
 	cfg.Presets.Set("main", &config.Preset{
 		LayerIcons: map[string]string{
