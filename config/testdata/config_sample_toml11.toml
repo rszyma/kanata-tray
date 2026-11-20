@@ -1,0 +1,21 @@
+#:tombi toml-version = "v1.1.0"
+
+[general]
+control_server_enable = true
+
+[defaults]
+extra_args = ["--nodelay"]
+layer_icons = {
+    mouse = 'mouse.png',
+    '*' = 'other.ico',
+}
+
+[presets]
+'with hooks' = {
+    autorun = true,
+    extra_env = { FOO = "1" },
+    hooks.pre-start = ["notify-send hi"],
+}
+'plain' = {
+    kanata_config = 'test.kbd',
+}

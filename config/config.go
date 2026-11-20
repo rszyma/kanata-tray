@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -325,7 +326,7 @@ func ParseConfig(cfgText string, cfgDefaultText string) (*Config, error) {
 	// so we need to hack something up to get the original declaration order.
 	presetNames, err := presetsOrder(cfgText)
 	if err != nil {
-		panic("default config failed layersOrder")
+		panic(fmt.Errorf("failed presetsOrder: %v", err))
 	}
 
 	// If parsed config has no presets, populate it with preset(s) from default config.
@@ -348,10 +349,16 @@ func ParseConfig(cfgText string, cfgDefaultText string) (*Config, error) {
 		Presets:        lib.NewOrderedMap[string, *Preset](),
 	}
 
+	if len(presetNames) != len(cfg.Presets) {
+		panic(fmt.Errorf(
+			"found %d presets, but got order for %d presets: %q",
+			len(cfg.Presets), len(presetNames), presetNames,
+		))
+	}
 	for _, presetName := range presetNames {
 		p, ok := cfg.Presets[presetName]
 		if !ok {
-			panic("preset names should match")
+			panic(fmt.Errorf("got order for unknown preset '%s'", presetName))
 		}
 		p.applyDefaults(cfg.PresetDefaults)
 		exported, err := p.IntoExported(presetName)
@@ -366,8 +373,24 @@ func ParseConfig(cfgText string, cfgDefaultText string) (*Config, error) {
 }
 
 // Returns an array of preset names from config in order of declaration.
+//
+// A preset can be declared in many ways, for example:
+//   - with a table header: `[presets.'name']` or `[presets.'name'.hooks]`,
+//   - with a key in the `[presets]` table: `'name' = { ... }` or `'name'.autorun = true`,
+//   - with a dotted key: `presets.'name'.autorun = true`,
+//   - with a key in an inline table: `presets = { 'name' = { ... } }`.
 func presetsOrder(cfgText string) ([]string, error) {
-	layerNamesInOrder := []string{}
+	names := []string{}
+	seen := map[string]bool{}
+	addName := func(name string) {
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+
+	// Key of the last table header, e.g. ["presets", "name"] for `[presets.'name']`.
+	var tableKey []string
 
 	p := tomlu.Parser{}
 	p.Reset([]byte(cfgText))
@@ -376,26 +399,33 @@ func presetsOrder(cfgText string) ([]string, error) {
 	for p.NextExpression() {
 		e := p.Expression()
 
-		if e.Kind != tomlu.Table {
+		// Full key of the expression, starting from the root table.
+		var key []string
+		switch e.Kind {
+		case tomlu.Table, tomlu.ArrayTable:
+			tableKey = keyAsStrings(e.Key())
+			key = tableKey
+		case tomlu.KeyValue:
+			key = slices.Concat(tableKey, keyAsStrings(e.Key()))
+			if len(key) == 1 && key[0] == "presets" && e.Value().Kind == tomlu.InlineTable {
+				it := e.Value().Children()
+				for it.Next() {
+					addName(keyAsStrings(it.Node().Key())[0])
+				}
+			}
+		default:
 			continue
 		}
 
-		// Let's look at the key. It's an iterator over the multiple dotted parts of the key.
-		it := e.Key()
-		parts := keyAsStrings(it)
-
-		// we're only considering keys that look like `presets.XXX`
-		if len(parts) != 2 {
-			continue
+		if len(key) >= 2 && key[0] == "presets" {
+			addName(key[1])
 		}
-		if parts[0] != "presets" {
-			continue
-		}
-
-		layerNamesInOrder = append(layerNamesInOrder, string(parts[1]))
+	}
+	if err := p.Error(); err != nil {
+		return nil, err
 	}
 
-	return layerNamesInOrder, nil
+	return names, nil
 }
 
 // helper to transfor a key iterator to a slice of strings
