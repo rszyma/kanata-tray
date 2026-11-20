@@ -22,7 +22,8 @@ var hookNum atomic.Int32
 // Returns first encountered error within all hook errors.
 //
 // `hookType` - stringified hook type e.g. "pre-start".
-func runAllBlockingHooks(hooks [][]string, hookType string) error {
+// `env` - extra environment variables for the hook processes.
+func runAllBlockingHooks(hooks [][]string, hookType string, env map[string]string) error {
 	timeout := 5 * time.Second
 	// We don't use ctx from outside, because we want to guarantee
 	// that the hooks finish normally in case of cancel from outside
@@ -44,7 +45,7 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 				makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&2"),
 				hook[0],
 				hook[1:],
-				map[string]string{},
+				env,
 			)
 			// TODO: capture stdout/stderr?
 			err := cmd.Start()
@@ -79,7 +80,8 @@ func runAllBlockingHooks(hooks [][]string, hookType string) error {
 }
 
 // `hookType` - stringified hook type e.g. "post-start-async".
-func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string) (allHooksExitedCh chan struct{}, anyHookErroredCh chan struct{}) {
+// `env` - extra environment variables for the hook processes.
+func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string, env map[string]string) (allHooksExitedCh chan struct{}, anyHookErroredCh chan struct{}) {
 	allHooksExitedCh = make(chan struct{}, 1)
 	anyHookErroredCh = make(chan struct{}, len(hooks))
 	wg := sync.WaitGroup{}
@@ -98,7 +100,7 @@ func runAllAsyncHooks(ctx context.Context, hooks [][]string, hookType string) (a
 			makeLogWrapWriter(fmt.Sprintf("hook=%d", n), "&2"),
 			hook[0],
 			hook[1:],
-			map[string]string{},
+			env,
 		)
 		// TODO: capture stdout/stderr?
 		err := cmd.Start()

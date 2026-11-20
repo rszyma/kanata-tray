@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/labstack/gommon/log"
@@ -85,7 +86,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		r.cmd.Stdout = logFile
 		r.cmd.Stderr = logFile
 
-		err = runAllBlockingHooks(hooks.PreStart, "pre-start")
+		err = runAllBlockingHooks(hooks.PreStart, "pre-start", nil)
 		if err != nil {
 			return fmt.Errorf("runAllBlockingHooks: %v", err)
 		}
@@ -98,6 +99,11 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 		}
 
 		log.Infof("Started kanata (pid=%d)", r.cmd.Process.Pid)
+
+		// Environment variables for the hooks that run after kanata started.
+		hookEnv := map[string]string{
+			"KANATA_PID": strconv.Itoa(r.cmd.Process.Pid),
+		}
 
 		// NOTE: Default wait time in kanata is 2000ms, so we need to wait at least this much.
 		// TODO: check if --wait-device-ms delays TCP server start.
@@ -122,14 +128,14 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			return nil
 		}
 
-		err = runAllBlockingHooks(hooks.PostStart, "post-start")
+		err = runAllBlockingHooks(hooks.PostStart, "post-start", hookEnv)
 		if err != nil {
 			return fmt.Errorf("runAllBlockingHooks: %v", err)
 		}
 
 		ctxAsyncHooks, asyncHooksCancel := context.WithCancel(ctx)
 		defer asyncHooksCancel()
-		allPostStartAsyncHooksExitedCh, anyHookErroredCh := runAllAsyncHooks(ctxAsyncHooks, hooks.PostStartAsync, "post-start-async")
+		allPostStartAsyncHooksExitedCh, anyHookErroredCh := runAllAsyncHooks(ctxAsyncHooks, hooks.PostStartAsync, "post-start-async", hookEnv)
 
 		cmdWaitCh := make(chan error, 1)
 		go func() {
@@ -152,7 +158,7 @@ func (r *Kanata) RunNonblocking(ctx context.Context, kanataExecutable string, ka
 			log.Debugf("All post-start-async hooks exited")
 		}
 
-		err = runAllBlockingHooks(hooks.PostStop, "post-stop")
+		err = runAllBlockingHooks(hooks.PostStop, "post-stop", hookEnv)
 		if err != nil {
 			err1 := fmt.Errorf("%w: %v", PostStopHookFailed, err)
 			if cmdWaitInterruptedErr != nil {
