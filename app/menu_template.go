@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/rszyma/kanata-tray/config"
@@ -89,16 +90,24 @@ func MenuTemplateFromConfig(cfg config.Config) ([]PresetMenuEntry, error) {
 	return presets, nil
 }
 
+// Expands a leading "~" to the user's home directory.
+// A "~" elsewhere is kept, e.g. in Windows short paths like `C:\PROGRA~1`.
 func expandHomeDir(path string) (string, error) {
-	if strings.Contains(path, "~") {
-		dirname, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to determine user's home directory")
-		}
-		expandedPath := strings.Replace(path, "~", dirname, 1)
-		return expandedPath, nil
+	if !hasHomeDirPrefix(path) {
+		return path, nil
 	}
-	return path, nil
+	dirname, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to determine user's home directory")
+	}
+	return dirname + path[1:], nil
+}
+
+func hasHomeDirPrefix(path string) bool {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		return true
+	}
+	return runtime.GOOS == "windows" && strings.HasPrefix(path, `~\`)
 }
 
 // func resolveFilePath(path string) (string, error) {
