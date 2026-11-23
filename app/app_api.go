@@ -44,11 +44,11 @@ func (a *SystrayApp) TogglePreset(presetName string) (msg string, err error) {
 	}
 	switch a.statuses[i] {
 	case statusRunning, statusStarting:
-		a.startPresetCh <- i
-		return "started", nil
-	case statusIdle, statusCrashed:
 		a.stopPresetChan <- i
 		return "stopped", nil
+	case statusIdle, statusCrashed:
+		a.startPresetCh <- i
+		return "started", nil
 	}
 	panic("unreachable")
 }
