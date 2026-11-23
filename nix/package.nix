@@ -28,12 +28,12 @@ buildGoModule (finalAttrs: {
     "-X main.buildDate=unknown"
   ];
 
-  nativeBuildInputs = lib.optional stdenv.hostPlatform.isLinux pkg-config;
-
-  buildInputs = [
+  nativeBuildInputs = [
     makeWrapper
   ]
-  ++ lib.optionals stdenv.hostPlatform.isLinux [
+  ++ lib.optional stdenv.hostPlatform.isLinux pkg-config;
+
+  buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
     libayatana-appindicator
     gtk3
   ];
